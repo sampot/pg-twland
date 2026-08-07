@@ -28,6 +28,55 @@ function deepClone(obj) {
   return JSON.parse(JSON.stringify(obj));
 }
 
+/** @param {number} from @param {number} steps forward */
+function pathForward(from, steps) {
+  const path = [from];
+  let pos = from;
+  for (let i = 0; i < steps; i++) {
+    pos = (pos + 1) % 40;
+    path.push(pos);
+  }
+  return path;
+}
+
+/** @param {number} from @param {number} steps backward (positive count) */
+function pathBackward(from, steps) {
+  const path = [from];
+  let pos = from;
+  for (let i = 0; i < steps; i++) {
+    pos = (pos + 39) % 40;
+    path.push(pos);
+  }
+  return path;
+}
+
+/** Clockwise from → to (inclusive ends). */
+function pathAdvance(from, to) {
+  const path = [from];
+  if (from === to) return path;
+  let pos = from;
+  do {
+    pos = (pos + 1) % 40;
+    path.push(pos);
+  } while (pos !== to);
+  return path;
+}
+
+function emptyStats(playerId) {
+  return {
+    playerId,
+    rentCollected: 0,
+    rentPaid: 0,
+    paidBank: 0,
+    bought: 0,
+    housesBuilt: 0,
+    hotelsBuilt: 0,
+    jailVisits: 0,
+    goPasses: 0,
+    cardsDrawn: 0,
+  };
+}
+
 export class TwLandGame {
   /**
    * @param {object} opts
@@ -89,6 +138,39 @@ export class TwLandGame {
     this.landedOwnTileId = /** @type {number|null} */ (null);
     /** @type {object[]} UI 動畫／揭示佇列（render 時消費） */
     this.fx = [];
+    /** @type {ReturnType<typeof emptyStats>[]} */
+    this.stats = this.players.map((p) => emptyStats(p.id));
+  }
+
+  /** @param {number} playerId */
+  bumpStat(playerId, key, amount = 1) {
+    const row = this.stats[playerId];
+    if (!row || !(key in row)) return;
+    row[key] += amount;
+  }
+
+  matchReport() {
+    const rows = this.players.map((p) => {
+      const st = this.stats[p.id] || emptyStats(p.id);
+      const props = BOARD.filter(
+        (t) => isOwnable(t) && this.props[t.id]?.owner === p.id,
+      ).length;
+      return {
+        id: p.id,
+        name: p.name,
+        bankrupt: p.bankrupt,
+        cash: p.cash,
+        props,
+        winner: p.id === this.winnerId,
+        ...st,
+      };
+    });
+    return {
+      winnerId: this.winnerId,
+      winnerName:
+        this.winnerId != null ? this.players[this.winnerId].name : null,
+      players: rows,
+    };
   }
 
   /** @param {object} event */
@@ -252,7 +334,13 @@ export class TwLandGame {
     const p = this.players[playerId];
     if (p.cash >= amount) {
       p.cash -= amount;
-      if (creditor !== "bank") this.players[creditor].cash += amount;
+      if (creditor !== "bank") {
+        this.players[creditor].cash += amount;
+        this.bumpStat(creditor, "rentCollected", amount);
+        this.bumpStat(playerId, "rentPaid", amount);
+      } else {
+        this.bumpStat(playerId, "paidBank", amount);
+      }
       this.pushLog(`${p.name} 支付 ${amount} 元（${reason}）。`);
       this.emitFx({
         type: "toast",
@@ -274,7 +362,13 @@ export class TwLandGame {
     const p = this.players[debtor];
     if (p.cash >= amount) {
       p.cash -= amount;
-      if (creditor !== "bank") this.players[creditor].cash += amount;
+      if (creditor !== "bank") {
+        this.players[creditor].cash += amount;
+        this.bumpStat(creditor, "rentCollected", amount);
+        this.bumpStat(debtor, "rentPaid", amount);
+      } else {
+        this.bumpStat(debtor, "paidBank", amount);
+      }
       this.pushLog(`${p.name} 付清 ${amount} 元（${reason}）。`);
       this.debt = null;
       this.afterDebtCleared();
@@ -316,6 +410,7 @@ export class TwLandGame {
         tone: "good",
         text: `${alive[0].name} 勝出！`,
       });
+      this.emitFx({ type: "report" });
       return true;
     }
     return false;
@@ -368,21 +463,32 @@ export class TwLandGame {
   movePlayer(playerId, steps, opts = {}) {
     const p = this.players[playerId];
     const collectGo = opts.collectGo !== false;
-    let next = p.pos + steps;
-    if (next >= 40) {
-      next %= 40;
-      if (collectGo) {
-        p.cash += GO_SALARY;
-        this.pushLog(`${p.name} 經過出發，領取 ${GO_SALARY} 元。`);
-        this.emitFx({
-          type: "toast",
-          tone: "good",
-          text: `${p.name} 過出發 +${GO_SALARY}`,
-        });
+    const from = p.pos;
+    const path =
+      steps >= 0 ? pathForward(from, steps) : pathBackward(from, -steps);
+    let passedGo = false;
+    if (steps > 0) {
+      for (let i = 1; i < path.length; i++) {
+        if (path[i] === 0) passedGo = true;
       }
     }
-    if (next < 0) next = (next + 40) % 40;
-    p.pos = next;
+    if (passedGo && collectGo) {
+      p.cash += GO_SALARY;
+      this.bumpStat(playerId, "goPasses");
+      this.pushLog(`${p.name} 經過出發，領取 ${GO_SALARY} 元。`);
+      this.emitFx({
+        type: "toast",
+        tone: "good",
+        text: `${p.name} 過出發 +${GO_SALARY}`,
+      });
+    }
+    this.emitFx({
+      type: "move",
+      playerId,
+      path,
+      warp: false,
+    });
+    p.pos = path[path.length - 1];
   }
 
   /**
@@ -393,33 +499,53 @@ export class TwLandGame {
   advanceTo(playerId, to, opts = {}) {
     const p = this.players[playerId];
     const collectGo = opts.collectGo !== false;
-    if (to < p.pos && collectGo) {
+    const from = p.pos;
+    const path = pathAdvance(from, to);
+    let passedGo = false;
+    for (let i = 1; i < path.length; i++) {
+      if (path[i] === 0) passedGo = true;
+    }
+    if (passedGo && collectGo) {
       p.cash += GO_SALARY;
-      this.pushLog(`${p.name} 經過出發，領取 ${GO_SALARY} 元。`);
+      this.bumpStat(playerId, "goPasses");
+      const atGo = to === 0;
+      this.pushLog(
+        atGo
+          ? `${p.name} 抵達出發，領取 ${GO_SALARY} 元。`
+          : `${p.name} 經過出發，領取 ${GO_SALARY} 元。`,
+      );
       this.emitFx({
         type: "toast",
         tone: "good",
-        text: `${p.name} 過出發 +${GO_SALARY}`,
-      });
-    } else if (to === 0 && p.pos !== 0) {
-      p.cash += GO_SALARY;
-      this.pushLog(`${p.name} 抵達出發，領取 ${GO_SALARY} 元。`);
-      this.emitFx({
-        type: "toast",
-        tone: "good",
-        text: `${p.name} 抵達出發 +${GO_SALARY}`,
+        text: atGo
+          ? `${p.name} 抵達出發 +${GO_SALARY}`
+          : `${p.name} 過出發 +${GO_SALARY}`,
       });
     }
+    this.emitFx({
+      type: "move",
+      playerId,
+      path,
+      warp: false,
+    });
     p.pos = to;
   }
 
   sendToJail(playerId) {
     const p = this.players[playerId];
+    const from = p.pos;
+    this.emitFx({
+      type: "move",
+      playerId,
+      path: from === 10 ? [10] : [from, 10],
+      warp: true,
+    });
     p.pos = 10;
     p.jail = true;
     p.jailTurns = 0;
     p.doubles = 0;
     this.canRollAgain = false;
+    this.bumpStat(playerId, "jailVisits");
     this.pushLog(`${p.name} 進入坐牢。`);
     this.emitFx({ type: "toast", tone: "warn", text: `${p.name} 進牢` });
   }
@@ -498,6 +624,7 @@ export class TwLandGame {
     else this.chestIdx = idx + 1;
 
     this.pushLog(`${p.name} 抽到${deck === "chance" ? "機會" : "命運"}：${card.text}`);
+    this.bumpStat(playerId, "cardsDrawn");
     this.emitFx({
       type: "card",
       deck,
@@ -706,6 +833,7 @@ export class TwLandGame {
     if (p.cash < tile.price) return { ok: false, error: "現金不足" };
     p.cash -= tile.price;
     this.props[id].owner = p.id;
+    this.bumpStat(p.id, "bought");
     this.pushLog(`${p.name} 買下「${tile.name}」，花 ${tile.price} 元。`);
     this.emitFx({
       type: "toast",
@@ -784,6 +912,7 @@ export class TwLandGame {
       this.housesLeft += 4;
       this.hotelsLeft -= 1;
       st.houses = 5;
+      this.bumpStat(p.id, "hotelsBuilt");
       this.pushLog(`${p.name} 在「${tile.name}」蓋旅館（${tile.houseCost} 元）。`);
       this.emitFx({
         type: "toast",
@@ -793,6 +922,7 @@ export class TwLandGame {
     } else {
       this.housesLeft -= 1;
       st.houses += 1;
+      this.bumpStat(p.id, "housesBuilt");
       this.pushLog(
         `${p.name} 在「${tile.name}」蓋第 ${st.houses} 棟房屋（${tile.houseCost} 元）。`,
       );

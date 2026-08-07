@@ -24,6 +24,14 @@ let fxBusy = false;
 /** @type {ReturnType<typeof setTimeout> | null} */
 let cardRevealTimer = null;
 let diceSpinning = false;
+/** Visual override while hopping tile-by-tile. */
+/** @type {Map<number, number>} */
+const animPos = new Map();
+let moveAnimating = false;
+let reportShown = false;
+
+const MOVE_STEP_MS = 130;
+const MOVE_WARP_MS = 220;
 
 const lobbyEl = document.getElementById("lobby");
 const gameEl = document.getElementById("game");
@@ -418,11 +426,11 @@ function stopAiLoop() {
 
 function scheduleAi() {
   stopAiLoop();
-  if (fxBusy || diceSpinning) return;
+  if (fxBusy || diceSpinning || moveAnimating) return;
   if (!game || !needsAiStep(game)) return;
   aiTimer = setTimeout(() => {
     aiTimer = null;
-    if (fxBusy || diceSpinning) return;
+    if (fxBusy || diceSpinning || moveAnimating) return;
     if (!game || !needsAiStep(game)) return;
     const id = actingPlayerId(game);
     const name = id != null ? game.players[id].name : "AI";
@@ -465,6 +473,163 @@ function playToastSound(text, tone) {
 }
 
 /**
+ * @param {{ playerId: number, path: number[], warp?: boolean }} evt
+ */
+function animateMove(evt) {
+  return new Promise((resolve) => {
+    const path = evt.path || [];
+    if (path.length <= 1) {
+      resolve();
+      return;
+    }
+    const steps = path.slice(1);
+    let i = 0;
+    const delay = evt.warp ? MOVE_WARP_MS : MOVE_STEP_MS;
+    const tick = () => {
+      if (i >= steps.length) {
+        resolve();
+        return;
+      }
+      const pos = steps[i++];
+      animPos.set(evt.playerId, pos);
+      sfx.move();
+      if (pos === 0 && !evt.warp) sfx.good();
+      paintBoard();
+      setTimeout(tick, delay);
+    };
+    animPos.set(evt.playerId, path[0]);
+    paintBoard();
+    setTimeout(tick, delay);
+  });
+}
+
+function openMatchReport() {
+  if (!game || typeof game.matchReport !== "function") return;
+  const report = game.matchReport();
+  const wrap = document.createElement("div");
+  wrap.className = "match-report";
+  const winnerLine = report.winnerName
+    ? `<p class="match-report-winner"><strong>${report.winnerName}</strong> 勝出</p>`
+    : "";
+  const cards = report.players
+    .map((row) => {
+      const badge = row.winner
+        ? `<span class="match-badge match-badge--win">勝</span>`
+        : row.bankrupt
+          ? `<span class="match-badge match-badge--out">破產</span>`
+          : "";
+      return `<article class="match-card${row.winner ? " match-card--win" : ""}">
+        <header>
+          ${tokenMarkup(row.id, { size: 26, className: "piece--lobby" })}
+          <div>
+            <strong>${row.name}</strong> ${badge}
+            <div class="meta">現金 ${money(row.cash)} · 地產 ${row.props}</div>
+          </div>
+        </header>
+        <dl class="match-stats">
+          <div><dt>收租</dt><dd>${money(row.rentCollected)}</dd></div>
+          <div><dt>付租</dt><dd>${money(row.rentPaid)}</dd></div>
+          <div><dt>購地</dt><dd>${row.bought}</dd></div>
+          <div><dt>蓋房</dt><dd>${row.housesBuilt}</dd></div>
+          <div><dt>旅館</dt><dd>${row.hotelsBuilt}</dd></div>
+          <div><dt>進牢</dt><dd>${row.jailVisits}</dd></div>
+          <div><dt>過出發</dt><dd>${row.goPasses}</dd></div>
+          <div><dt>抽卡</dt><dd>${row.cardsDrawn}</dd></div>
+        </dl>
+      </article>`;
+    })
+    .join("");
+  wrap.innerHTML = `${winnerLine}${cards}`;
+  openSheet("本局戰報", wrap, [
+    {
+      label: "關閉",
+      className: "secondary",
+      onClick: closeSheet,
+    },
+    {
+      label: "再來一局",
+      className: "primary",
+      onClick: () => {
+        stopAiLoop();
+        lastAiBanner = "";
+        reportShown = false;
+        animPos.clear();
+        lobbyEl.hidden = false;
+        gameEl.hidden = true;
+        game = null;
+        closeSheet();
+      },
+    },
+  ]);
+}
+
+/**
+ * @param {object[]} events
+ */
+async function runFxQueue(events) {
+  if (!events?.length) {
+    if (!fxBusy && !diceSpinning && !moveAnimating) scheduleAi();
+    return;
+  }
+  const moves = events.filter((e) => e.type === "move");
+  const rest = events.filter((e) => e.type !== "move");
+  if (moves.length) {
+    moveAnimating = true;
+    stopAiLoop();
+    for (const m of moves) {
+      // Prefer logical position as start if path omitted start sync
+      await animateMove(m);
+    }
+    animPos.clear();
+    moveAnimating = false;
+    paintBoard();
+  }
+  let wantReport = false;
+  for (const e of rest) {
+    if (e.type === "card") showCardReveal(e);
+    else if (e.type === "toast") {
+      showToast(e.text, e.tone || "neutral");
+      playToastSound(e.text, e.tone || "neutral");
+    } else if (e.type === "report") {
+      wantReport = true;
+    }
+  }
+  if (wantReport && !reportShown) {
+    reportShown = true;
+    // Let toast/card settle briefly
+    setTimeout(() => openMatchReport(), 400);
+  }
+  if (!fxBusy && !diceSpinning && !moveAnimating) scheduleAi();
+}
+
+function playFx(events) {
+  void runFxQueue(events);
+}
+
+/** Anticipation spin, then run the real roll. */
+function rollWithFx(action) {
+  if (!game || diceSpinning || fxBusy || moveAnimating) return;
+  unlockAudio();
+  diceSpinning = true;
+  stopAiLoop();
+  const faces = () => 1 + Math.floor(Math.random() * 6);
+  let ticks = 0;
+  const spin = () => {
+    diceLabel.innerHTML = diceMarkup([faces(), faces()], { forceSpin: true });
+    sfx.diceTick();
+    ticks += 1;
+    if (ticks < 8) {
+      setTimeout(spin, 55 + ticks * 12);
+      return;
+    }
+    diceSpinning = false;
+    lastPaintedDice = null;
+    afterAct(action());
+  };
+  spin();
+}
+
+/**
  * @param {{ deck: string, text: string, player?: string }} evt
  */
 function showCardReveal(evt) {
@@ -493,40 +658,6 @@ function showCardReveal(evt) {
   );
   if (cardRevealTimer != null) clearTimeout(cardRevealTimer);
   cardRevealTimer = setTimeout(dismissCardReveal, 2600);
-}
-
-function playFx(events) {
-  if (!events?.length) return;
-  for (const e of events) {
-    if (e.type === "card") showCardReveal(e);
-    else if (e.type === "toast") {
-      showToast(e.text, e.tone || "neutral");
-      playToastSound(e.text, e.tone || "neutral");
-    }
-  }
-}
-
-/** Anticipation spin, then run the real roll. */
-function rollWithFx(action) {
-  if (!game || diceSpinning || fxBusy) return;
-  unlockAudio();
-  diceSpinning = true;
-  stopAiLoop();
-  const faces = () => 1 + Math.floor(Math.random() * 6);
-  let ticks = 0;
-  const spin = () => {
-    diceLabel.innerHTML = diceMarkup([faces(), faces()], { forceSpin: true });
-    sfx.diceTick();
-    ticks += 1;
-    if (ticks < 8) {
-      setTimeout(spin, 55 + ticks * 12);
-      return;
-    }
-    diceSpinning = false;
-    lastPaintedDice = null;
-    afterAct(action());
-  };
-  spin();
 }
 
 function dismissCardReveal() {
@@ -674,13 +805,18 @@ function paintBoard() {
     }
     if (st?.mortgaged) sub = sub ? `${sub} · 抵押` : "抵押";
 
-    const occupants = game.players.filter(
-      (p) => !p.bankrupt && p.pos === tile.id,
-    );
+    const occupants = game.players.filter((p) => {
+      if (p.bankrupt) return false;
+      const pos = animPos.has(p.id) ? animPos.get(p.id) : p.pos;
+      return pos === tile.id;
+    });
     const here = occupants.some((p) => p.id === game.turn);
     el.classList.toggle("here", here);
     el.classList.toggle("has-buildings", Boolean(st?.houses));
-    if (tile.id === currentPos) focusEl = el;
+    const focusPos = animPos.has(game.turn)
+      ? animPos.get(game.turn)
+      : currentPos;
+    if (tile.id === focusPos) focusEl = el;
 
     const ownerDot =
       st?.owner != null
@@ -733,7 +869,7 @@ function paintBoard() {
     el.innerHTML = `${swatch}${cornerIcon}<span class="cell-body"><span class="name">${ownerDot}${deckBadge}${tile.name}</span>${buildings}<span class="sub">${sub || "—"}</span></span><span class="tokens">${tokens}</span>`;
   }
 
-  if (movedThisPaint) sfx.move();
+  if (movedThisPaint && !moveAnimating) sfx.move();
 
   for (const p of game.players) {
     if (!p.bankrupt) prevPlayerPos.set(p.id, p.pos);
@@ -773,7 +909,7 @@ function paintPlayers() {
       })}
       <div class="player-card-text">
         <strong>${p.name}${p.ai ? " · AI" : ""} <span class="piece-label">${TOKEN_META[p.id % TOKEN_META.length].label}</span></strong>
-        <div class="meta">${p.bankrupt ? "已破產" : p.jail ? "坐牢中" : `位置：${tileById(p.pos).name}`} · 地產 ${owned}${p.jailCards ? ` · 出獄卡 ${p.jailCards}` : ""}</div>
+        <div class="meta">${p.bankrupt ? "已破產" : p.jail && !animPos.has(p.id) ? "坐牢中" : `位置：${tileById(animPos.has(p.id) ? animPos.get(p.id) : p.pos).name}`} · 地產 ${owned}${p.jailCards ? ` · 出獄卡 ${p.jailCards}` : ""}</div>
       </div>
       <strong class="cash">${p.bankrupt ? "—" : money(p.cash)}</strong>
     `;
@@ -839,7 +975,6 @@ function render() {
   paintLog();
   paintActions();
   playFx(fx);
-  if (!fxBusy && !diceSpinning) scheduleAi();
 }
 
 function ownedTiles(playerId, { bareOnly = false } = {}) {
@@ -1100,8 +1235,14 @@ function paintActions() {
     const w = game.players[game.winnerId];
     setPrompt(`${w.name} 贏得這局！`);
     actionsEl.appendChild(
+      btn("查看戰報", "secondary", () => openMatchReport()),
+    );
+    actionsEl.appendChild(
       btn("再來一局", "primary", () => {
         stopAiLoop();
+        lastAiBanner = "";
+        reportShown = false;
+        animPos.clear();
         lobbyEl.hidden = false;
         gameEl.hidden = true;
         game = null;
@@ -1217,8 +1358,11 @@ document.getElementById("btn-start").addEventListener("click", () => {
   lastAiBanner = "";
   lastPaintedDice = null;
   prevPlayerPos.clear();
+  animPos.clear();
   fxBusy = false;
   diceSpinning = false;
+  moveAnimating = false;
+  reportShown = false;
   if (cardRevealTimer != null) {
     clearTimeout(cardRevealTimer);
     cardRevealTimer = null;
