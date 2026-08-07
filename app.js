@@ -87,6 +87,57 @@ const TOKEN_META = [
   { id: "lantern", label: "燈籠" },
 ];
 
+/** Fun default nicknames (aligned with seat pieces first). */
+const SEAT_DEFAULT_NAMES = ["機車王", "珍奶控", "捷運通", "燈籠俠"];
+
+const FUN_NAME_POOL = [
+  "夜市王",
+  "滷肉飯神",
+  "蚵仔煎",
+  "刈包俠",
+  "地瓜球",
+  "鳳梨酥",
+  "豆花仙",
+  "鹽酥雞",
+  "小籠包",
+  "蔥油餅",
+  "車輪餅",
+  "雞排魂",
+];
+
+/**
+ * @param {number} n
+ * @param {string[]} [preserve]
+ */
+function pickDefaultNames(n, preserve = []) {
+  const used = new Set(
+    preserve.map((s) => s.trim()).filter(Boolean),
+  );
+  const extras = FUN_NAME_POOL.filter((name) => !used.has(name));
+  // Light shuffle so reopening seats feels fresh when filling gaps
+  for (let i = extras.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [extras[i], extras[j]] = [extras[j], extras[i]];
+  }
+  let extraIdx = 0;
+  /** @type {string[]} */
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    const kept = preserve[i]?.trim();
+    if (kept) {
+      out.push(kept);
+      continue;
+    }
+    let name = SEAT_DEFAULT_NAMES[i];
+    if (!name || used.has(name)) {
+      name = extras[extraIdx++] || `玩家 ${i + 1}`;
+    }
+    used.add(name);
+    out.push(name);
+  }
+  return out;
+}
+
 /**
  * @param {number} playerId
  * @param {{ size?: number, title?: string, className?: string }} [opts]
