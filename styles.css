@@ -1805,3 +1805,49 @@ button.ghost {
     bottom: 1.5rem;
   }
 }
+
+/* —— SFX toggle —— */
+.hero-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.2rem;
+}
+
+.hero-top .hero-kicker {
+  margin: 0;
+  text-align: left;
+}
+
+.sfx-toggle {
+  min-height: 36px;
+  padding: 0.35rem 0.7rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in oklab, var(--accent) 35%, var(--line));
+  background: color-mix(in oklab, var(--accent) 10%, var(--panel));
+  color: var(--text);
+  font-size: 0.75rem;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  flex-shrink: 0;
+}
+
+.sfx-toggle--off {
+  opacity: 0.7;
+  border-color: var(--line);
+  background: transparent;
+  color: var(--muted);
+}
+
+body:has(#game:not([hidden])) .hero-top {
+  margin-bottom: 0;
+}
+
+body:has(#game:not([hidden])) .hero-top .hero-kicker {
+  display: none;
+}
+
+body:has(#game:not([hidden])) .hero-top {
+  justify-content: flex-end;
+}

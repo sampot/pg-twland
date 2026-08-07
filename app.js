@@ -1,6 +1,12 @@
 import { BOARD, GROUP_COLOR, tileById, isOwnable } from "./board.js";
 import { TwLandGame } from "./engine.js";
 import { aiStep, needsAiStep, actingPlayerId } from "./ai.js";
+import {
+  sfx,
+  unlockAudio,
+  isMuted,
+  toggleMuted,
+} from "./sounds.js";
 
 /** @type {TwLandGame | null} */
 let game = null;
@@ -40,6 +46,31 @@ const cardRevealEl = document.getElementById("card-reveal");
 const cardRevealKicker = document.getElementById("card-reveal-kicker");
 const cardRevealTitle = document.getElementById("card-reveal-title");
 const cardRevealText = document.getElementById("card-reveal-text");
+const sfxBtn = document.getElementById("btn-sfx");
+
+function syncSfxButton() {
+  if (!sfxBtn) return;
+  const off = isMuted();
+  sfxBtn.textContent = off ? "音效關" : "音效開";
+  sfxBtn.setAttribute("aria-pressed", off ? "true" : "false");
+  sfxBtn.classList.toggle("sfx-toggle--off", off);
+  sfxBtn.title = off ? "開啟音效" : "關閉音效";
+}
+
+syncSfxButton();
+sfxBtn?.addEventListener("click", () => {
+  unlockAudio();
+  toggleMuted();
+  syncSfxButton();
+  if (!isMuted()) sfx.ui();
+});
+document.addEventListener(
+  "pointerdown",
+  () => {
+    unlockAudio();
+  },
+  { once: true, passive: true },
+);
 
 const TOKEN_COLORS = [
   "var(--token-0)",
@@ -201,6 +232,7 @@ function diceMarkup(pair, opts = {}) {
     lastPaintedDice[0] !== a ||
     lastPaintedDice[1] !== b;
   if (!opts.forceSpin) lastPaintedDice = [a, b];
+  if (changed && !opts.forceSpin) sfx.diceLand();
   const rollCls = changed ? " is-rolling" : "";
   const die = (n) =>
     `<span class="die${rollCls}" data-face="${n}" aria-label="${n}">${"<span class='pip'></span>".repeat(9)}</span>`;
@@ -325,22 +357,15 @@ function showToast(text, tone = "neutral") {
   }, 2200);
 }
 
-function dismissCardReveal() {
-  if (cardRevealTimer != null) {
-    clearTimeout(cardRevealTimer);
-    cardRevealTimer = null;
+function playToastSound(text, tone) {
+  if (tone === "good") {
+    if (/勝出/.test(text)) sfx.win();
+    else if (/旅館|房屋/.test(text)) sfx.build();
+    else sfx.good();
+  } else if (tone === "warn") {
+    if (/進牢/.test(text)) sfx.jail();
+    else sfx.warn();
   }
-  if (!cardRevealEl || cardRevealEl.hidden) {
-    fxBusy = false;
-    scheduleAi();
-    return;
-  }
-  cardRevealEl.classList.remove("card-reveal--show");
-  setTimeout(() => {
-    cardRevealEl.hidden = true;
-    fxBusy = false;
-    scheduleAi();
-  }, 200);
 }
 
 /**
@@ -351,6 +376,8 @@ function showCardReveal(evt) {
   fxBusy = true;
   stopAiLoop();
   const isChance = evt.deck === "chance";
+  if (isChance) sfx.cardChance();
+  else sfx.cardChest();
   cardRevealEl.classList.toggle("card-reveal--chance", isChance);
   cardRevealEl.classList.toggle("card-reveal--chest", !isChance);
   cardRevealKicker.textContent = isChance ? "機會" : "命運";
@@ -376,19 +403,24 @@ function playFx(events) {
   if (!events?.length) return;
   for (const e of events) {
     if (e.type === "card") showCardReveal(e);
-    else if (e.type === "toast") showToast(e.text, e.tone || "neutral");
+    else if (e.type === "toast") {
+      showToast(e.text, e.tone || "neutral");
+      playToastSound(e.text, e.tone || "neutral");
+    }
   }
 }
 
 /** Anticipation spin, then run the real roll. */
 function rollWithFx(action) {
   if (!game || diceSpinning || fxBusy) return;
+  unlockAudio();
   diceSpinning = true;
   stopAiLoop();
   const faces = () => 1 + Math.floor(Math.random() * 6);
   let ticks = 0;
   const spin = () => {
     diceLabel.innerHTML = diceMarkup([faces(), faces()], { forceSpin: true });
+    sfx.diceTick();
     ticks += 1;
     if (ticks < 8) {
       setTimeout(spin, 55 + ticks * 12);
@@ -399,6 +431,24 @@ function rollWithFx(action) {
     afterAct(action());
   };
   spin();
+}
+
+function dismissCardReveal() {
+  if (cardRevealTimer != null) {
+    clearTimeout(cardRevealTimer);
+    cardRevealTimer = null;
+  }
+  if (!cardRevealEl || cardRevealEl.hidden) {
+    fxBusy = false;
+    scheduleAi();
+    return;
+  }
+  cardRevealEl.classList.remove("card-reveal--show");
+  setTimeout(() => {
+    cardRevealEl.hidden = true;
+    fxBusy = false;
+    scheduleAi();
+  }, 200);
 }
 
 function buildBoardShell() {
@@ -507,6 +557,7 @@ function paintBoard() {
   /** @type {HTMLElement | null} */
   let focusEl = null;
   const currentPos = game.current()?.pos;
+  let movedThisPaint = false;
 
   for (const tile of BOARD) {
     const el = boardEl.querySelector(`[data-id="${tile.id}"]`);
@@ -560,6 +611,7 @@ function paintBoard() {
     const tokens = occupants
       .map((p) => {
         const moved = prevPlayerPos.has(p.id) && prevPlayerPos.get(p.id) !== p.pos;
+        if (moved) movedThisPaint = true;
         return tokenMarkup(p.id, {
           size: 22,
           title: `${p.name}（${TOKEN_META[p.id % TOKEN_META.length].label}）`,
@@ -570,6 +622,8 @@ function paintBoard() {
 
     el.innerHTML = `${swatch}<span class="cell-body"><span class="name">${ownerDot}${deckBadge}${tile.name}</span>${buildings}<span class="sub">${sub || "—"}</span></span><span class="tokens">${tokens}</span>`;
   }
+
+  if (movedThisPaint) sfx.move();
 
   for (const p of game.players) {
     if (!p.bankrupt) prevPlayerPos.set(p.id, p.pos);
@@ -1071,6 +1125,8 @@ document.getElementById("btn-start").addEventListener("click", () => {
   lobbyEl.hidden = true;
   gameEl.hidden = false;
   closeSheet();
+  unlockAudio();
+  sfx.start();
   render();
 });
 
