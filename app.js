@@ -72,13 +72,17 @@ sfxBtn?.addEventListener("click", () => {
   syncSfxButton();
   if (!isMuted()) sfx.ui();
 });
-document.addEventListener(
-  "pointerdown",
-  () => {
+
+/** Keep unlocking until media play succeeds (iOS／Android autoplay). */
+function armAudioUnlockGestures() {
+  const onGesture = () => {
     unlockAudio();
-  },
-  { once: true, passive: true },
-);
+  };
+  for (const type of ["pointerdown", "touchstart", "keydown"]) {
+    document.addEventListener(type, onGesture, { passive: true, capture: true });
+  }
+}
+armAudioUnlockGestures();
 
 const TOKEN_COLORS = [
   "var(--token-0)",
