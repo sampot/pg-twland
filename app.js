@@ -1227,6 +1227,10 @@ function openTradeSheet(fromDebt = false) {
 function paintActions() {
   if (!game) return;
   actionsEl.innerHTML = "";
+  if (moveAnimating || diceSpinning) {
+    setPrompt(moveAnimating ? "棋子移動中…" : "擲骰中…");
+    return;
+  }
   const phase = game.phase;
   const p = game.current();
 
