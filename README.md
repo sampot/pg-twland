@@ -48,6 +48,7 @@ python3 -m http.server 8080
 | `index.html` | 結構 |
 | `styles.css` | 亮／暗色、mobile-first |
 | `app.js` | 熱座 UI |
+| `sounds.js` | Web Audio 合成音效（可靜音） |
 | `engine.js` | 規則狀態機 |
 | `board.js` | 40 格路名與價位 |
 | `cards.js` | 機會／命運 |
