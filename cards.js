@@ -240,7 +240,7 @@ export const CHEST = [
   },
   {
     id: "h16",
-    text: "阿公阿嬤遺產入帳 100 元（含三罐老干媽）。",
+    text: "阿公阿嬤遺產入帳 100 元（還附三罐辣椒醬）。",
     kind: "collect",
     amount: 100,
   },

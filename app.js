@@ -860,7 +860,7 @@ function paintBoard() {
     if (tile.type === "tax") sub = money(tile.tax);
     if (tile.type === "go") sub = `過格 +${GO_SALARY}`;
     if (tile.type === "jail") sub = "只是探監／坐牢";
-    if (tile.type === "parking") sub = "休息一回合位";
+    if (tile.type === "parking") sub = "免費停車（無特殊效果）";
     if (tile.type === "gotojail") sub = "立刻送進牢房";
     if (tile.type === "chance") sub = "抽機會卡";
     if (tile.type === "chest") sub = "抽命運卡";
@@ -1226,7 +1226,7 @@ function openTradeSheet(fromDebt = false) {
 
   const offerList = document.createElement("div");
   offerList.className = "tile-list";
-  offerList.innerHTML = "<h3>你出让的地（無房屋）</h3>";
+    offerList.innerHTML = "<h3>你出讓的地（無房屋）</h3>";
   for (const t of ownedTiles(from, { bareOnly: true })) {
     const row = document.createElement("label");
     row.className = "tile-row";
@@ -1244,7 +1244,7 @@ function openTradeSheet(fromDebt = false) {
 
   const askList = document.createElement("div");
   askList.className = "tile-list";
-  askList.innerHTML = "<h3>你索取的地</h3>";
+  askList.innerHTML = "<h3>你想換進來的地</h3>";
   const refreshAsk = () => {
     askList.querySelectorAll("label.tile-row").forEach((n) => n.remove());
     askSet.clear();

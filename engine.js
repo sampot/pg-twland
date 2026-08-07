@@ -664,7 +664,7 @@ export class TwLandGame {
               o.cash = 0;
             }
           }
-          this.pushLog(`${p.name} 向其他玩家共收得款項。`);
+          this.pushLog(`${p.name} 向其他玩家收齊款項。`);
           finish();
         } else {
           p.cash += card.amount;
@@ -1118,12 +1118,12 @@ export class TwLandGame {
     const askTiles = proposal.askTiles || [];
     for (const id of offerTiles) {
       if (this.props[id]?.owner !== from || this.props[id].houses > 0) {
-        return { ok: false, error: "出让地產無效（須無房屋）" };
+        return { ok: false, error: "出讓地產無效（須無房屋）" };
       }
     }
     for (const id of askTiles) {
       if (this.props[id]?.owner !== to || this.props[id].houses > 0) {
-        return { ok: false, error: "索取地產無效（須無房屋）" };
+        return { ok: false, error: "換入地產無效（須無房屋）" };
       }
     }
     this.trade = {

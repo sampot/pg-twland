@@ -1717,6 +1717,19 @@ button.ghost {
     transform: rotate(28deg);
   }
 
+  .center-slot .deck-stack {
+    width: clamp(3.8rem, 9vw, 5.4rem);
+    height: clamp(5rem, 12vw, 7rem);
+  }
+
+  .center-slot .deck-glyph {
+    font-size: clamp(1.5rem, 3vw, 2.1rem);
+  }
+
+  .center-slot .deck-label {
+    font-size: clamp(0.7rem, 1.4vw, 0.85rem);
+  }
+
   .die--board {
     width: clamp(3.4rem, 8vw, 4.6rem);
     height: clamp(3.4rem, 8vw, 4.6rem);
