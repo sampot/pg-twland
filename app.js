@@ -318,7 +318,7 @@ function money(n) {
   return `${n.toLocaleString("zh-Hant")} 元`;
 }
 
-/** Visual dice faces for the status bar. */
+/** Visual dice faces for the status bar / board center. */
 function diceMarkup(pair, opts = {}) {
   if (!pair) {
     lastPaintedDice = null;
@@ -331,7 +331,12 @@ function diceMarkup(pair, opts = {}) {
     lastPaintedDice[0] !== a ||
     lastPaintedDice[1] !== b;
   if (!opts.forceSpin) lastPaintedDice = [a, b];
-  if (changed && !opts.forceSpin) sfx.diceLand();
+  if (changed && !opts.forceSpin) {
+    sfx.diceLand();
+    // Final result lands on the paper center (human + AI).
+    paintBoardDice([a, b], { spinning: false });
+    hideBoardDiceSoon(1200);
+  }
   const rollCls = changed ? " is-rolling" : "";
   const die = (n) =>
     `<span class="die${rollCls}" data-face="${n}" aria-label="${n}">${"<span class='pip'></span>".repeat(9)}</span>`;
@@ -339,6 +344,58 @@ function diceMarkup(pair, opts = {}) {
     ? `<span class="dice-sum">…</span>`
     : `<span class="dice-sum">${a}+${b}=${a + b}</span>`;
   return `${die(a)}${die(b)}${sum}`;
+}
+
+/** @type {ReturnType<typeof setTimeout> | null} */
+let boardDiceHideTimer = null;
+
+function getBoardDiceEl() {
+  return /** @type {HTMLElement | null} */ (boardEl.querySelector("#board-dice"));
+}
+
+function setBoardDiceVisible(on) {
+  const el = getBoardDiceEl();
+  const center = boardEl.querySelector(".center-slot");
+  if (!el || !center) return;
+  el.hidden = !on;
+  center.classList.toggle("center-slot--rolling", on);
+}
+
+/**
+ * @param {[number, number]} pair
+ * @param {{ spinning?: boolean }} [opts]
+ */
+function paintBoardDice(pair, opts = {}) {
+  const el = getBoardDiceEl();
+  if (!el) return;
+  const [a, b] = pair;
+  const rollCls = opts.spinning ? " is-rolling" : " is-landed";
+  const die = (n) =>
+    `<span class="die die--board${rollCls}" data-face="${n}" aria-label="${n}">${"<span class='pip'></span>".repeat(9)}</span>`;
+  const sum = opts.spinning
+    ? `<span class="board-dice-sum">擲骰中</span>`
+    : `<span class="board-dice-sum">${a} + ${b} = ${a + b}</span>`;
+  el.innerHTML = `<div class="board-dice-inner">${die(a)}${die(b)}</div>${sum}`;
+  setBoardDiceVisible(true);
+}
+
+function hideBoardDiceSoon(ms = 1200) {
+  if (boardDiceHideTimer != null) clearTimeout(boardDiceHideTimer);
+  boardDiceHideTimer = setTimeout(() => {
+    boardDiceHideTimer = null;
+    if (!diceSpinning) setBoardDiceVisible(false);
+  }, ms);
+}
+
+function scrollBoardCenterIntoView() {
+  const center = boardEl.querySelector(".center-slot");
+  if (
+    center &&
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(max-width: 719px)").matches
+  ) {
+    center.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }
 }
 
 function closeSheet() {
@@ -612,10 +669,17 @@ function rollWithFx(action) {
   unlockAudio();
   diceSpinning = true;
   stopAiLoop();
+  if (boardDiceHideTimer != null) {
+    clearTimeout(boardDiceHideTimer);
+    boardDiceHideTimer = null;
+  }
+  scrollBoardCenterIntoView();
   const faces = () => 1 + Math.floor(Math.random() * 6);
   let ticks = 0;
   const spin = () => {
-    diceLabel.innerHTML = diceMarkup([faces(), faces()], { forceSpin: true });
+    const pair = /** @type {[number, number]} */ ([faces(), faces()]);
+    paintBoardDice(pair, { spinning: true });
+    diceLabel.innerHTML = diceMarkup(pair, { forceSpin: true });
     sfx.diceTick();
     ticks += 1;
     if (ticks < 8) {
@@ -729,6 +793,7 @@ function buildBoardShell() {
         </span>
       </div>
     </div>
+    <div id="board-dice" class="board-dice" hidden aria-live="polite"></div>
   `;
   boardEl.appendChild(center);
 }
