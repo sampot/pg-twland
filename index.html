@@ -9,16 +9,27 @@
       content="台灣路名紙本地產環：買地蓋房、機會命運、拍賣交易。純前端 Playgrounds SAM。"
     />
     <title>台灣路名地產</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Instrument+Sans:ital,wght@0,400..700;1,400..700&family=Noto+Serif+TC:wght@600;700&display=swap"
+      rel="stylesheet"
+    />
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
     <main>
       <header class="hero">
+        <p class="hero-kicker">Playgrounds · SAM</p>
         <h1>台灣路名地產</h1>
         <p class="tagline">紙本規則 · 台灣路名 · 熱座 2–4 人</p>
       </header>
 
-      <section id="lobby" class="panel" aria-label="開局">
+      <section id="lobby" class="panel lobby-panel" aria-label="開局">
+        <div class="lobby-head">
+          <h2 class="lobby-title">開局設定</h2>
+          <p class="lobby-lead">選人數、取暱稱，其餘座位可交 AI 託管。</p>
+        </div>
         <label class="field">
           <span>人數</span>
           <select id="player-count">
@@ -28,25 +39,24 @@
           </select>
         </label>
         <div id="name-fields" class="name-fields"></div>
-        <button type="button" id="btn-start" class="primary">開始</button>
+        <button type="button" id="btn-start" class="primary">開始對局</button>
         <p class="hint">
-          經典紙本機制（買地、拍賣、蓋房、抵押、交易、破產）。金額單位為「元」。可將任一玩家「託管
-          AI」自動玩；對局中也能隨時收回。
+          對齊台灣版紙本：起手 1500、過出發 200、拒買維持空地（不拍賣）、集齊同色組且停在自家地才可蓋房、坐牢仍可收租／交易／蓋房。
         </p>
       </section>
 
       <section id="game" class="game" hidden>
         <div class="status-bar" role="status">
-          <div>
+          <div class="status-chip">
             <span class="label">階段</span>
             <strong id="phase-label">—</strong>
           </div>
-          <div>
+          <div class="status-chip status-chip--dice">
             <span class="label">骰子</span>
-            <strong id="dice-label">—</strong>
+            <div id="dice-label" class="dice-row" aria-live="polite">—</div>
           </div>
-          <div>
-            <span class="label">房／旅</span>
+          <div class="status-chip">
+            <span class="label">房／旅庫存</span>
             <strong id="stock-label">—</strong>
           </div>
         </div>
@@ -62,7 +72,9 @@
         <div class="board-section">
           <div class="board-head">
             <h2 class="board-title">棋盤</h2>
-            <p class="board-hint" id="board-hint">直向列表 · 點格看詳情</p>
+            <p class="board-hint" id="board-hint">
+              直向列表 · 中央為機會／命運牌位 · 點格看詳情
+            </p>
           </div>
           <div class="board-wrap">
             <div id="board" class="board" role="list" aria-label="棋盤"></div>
@@ -90,6 +102,23 @@
         <h2 id="sheet-title"></h2>
         <div id="sheet-body"></div>
         <div id="sheet-actions" class="sheet-actions"></div>
+      </div>
+    </div>
+
+    <div id="toast-host" class="toast-host" aria-live="polite"></div>
+
+    <div id="card-reveal" class="card-reveal" hidden>
+      <button type="button" class="card-reveal-backdrop" aria-label="關閉"></button>
+      <div
+        class="card-reveal-panel"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="card-reveal-title"
+      >
+        <p class="card-reveal-kicker" id="card-reveal-kicker">機會</p>
+        <h2 class="card-reveal-title" id="card-reveal-title">抽卡</h2>
+        <p class="card-reveal-text" id="card-reveal-text"></p>
+        <p class="card-reveal-hint">點任意處繼續</p>
       </div>
     </div>
 

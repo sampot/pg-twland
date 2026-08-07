@@ -13,7 +13,7 @@ import {
 import { CHANCE, CHEST, shuffle } from "./cards.js";
 
 /**
- * @typedef {'lobby'|'roll'|'jail_turn'|'buy'|'auction'|'debt'|'manage'|'trade'|'ended'} Phase
+ * @typedef {'lobby'|'roll'|'jail_turn'|'buy'|'debt'|'manage'|'trade'|'ended'} Phase
  */
 
 /**
@@ -76,8 +76,7 @@ export class TwLandGame {
     this.turn = 0;
     this.lastDice = /** @type {[number, number]|null} */ (null);
     this.pendingBuy = /** @type {number|null} */ (null);
-    /** @type {null|{tileId:number, highBid:number, highBidder:number|null, turn:number, passed:number[]}} */
-    this.auction = null;
+    this.auction = null; // unused (台灣版拒買不拍賣); kept null for older UI snapshots
     /** @type {null|{debtor:number, creditor:number|'bank', amount:number, reason:string}} */
     this.debt = null;
     /** @type {null|{from:number, to:number, offerCash:number, askCash:number, offerTiles:number[], askTiles:number[], offerJail:number, askJail:number}} */
@@ -86,6 +85,21 @@ export class TwLandGame {
     this.turnStarted = false;
     /** @type {null|{playerId:number, total:number}} */
     this.pendingJailExit = null;
+    /** 本次移動停在自己的地產格（蓋房資格；坐牢中不限） */
+    this.landedOwnTileId = /** @type {number|null} */ (null);
+    /** @type {object[]} UI 動畫／揭示佇列（render 時消費） */
+    this.fx = [];
+  }
+
+  /** @param {object} event */
+  emitFx(event) {
+    this.fx.push(event);
+  }
+
+  consumeFx() {
+    const out = this.fx;
+    this.fx = [];
+    return out;
   }
 
   pushLog(msg) {
@@ -118,10 +132,43 @@ export class TwLandGame {
 
   start() {
     if (this.phase !== "lobby") return { ok: false, error: "已開局" };
+    // 點數最大者先出發（平手則平手者再擲）
+    this.turn = this.rollForInitiative();
     this.phase = "roll";
     this.turnStarted = true;
-    this.pushLog(`開局！${this.current().name} 先手（各持 ${START_CASH} 元）。`);
+    this.landedOwnTileId = null;
+    const first = this.current();
+    this.pushLog(
+      `開局！各持 ${START_CASH} 元。${first.name} 點數最大，先出發（順時針）。`,
+    );
     return { ok: true };
+  }
+
+  /** @returns {number} winning player id */
+  rollForInitiative() {
+    let contenders = this.players.map((p) => p.id);
+    while (contenders.length > 1) {
+      /** @type {{id:number, total:number}[]} */
+      const rolls = [];
+      let best = -1;
+      for (const id of contenders) {
+        const d1 = rollDie(this.rng);
+        const d2 = rollDie(this.rng);
+        const total = d1 + d2;
+        rolls.push({ id, total });
+        this.pushLog(
+          `${this.players[id].name} 爭先手擲出 ${d1}+${d2}=${total}。`,
+        );
+        if (total > best) best = total;
+      }
+      const tied = rolls.filter((r) => r.total === best).map((r) => r.id);
+      if (tied.length === 1) return tied[0];
+      this.pushLog(
+        `平手（${best} 點）：${tied.map((id) => this.players[id].name).join("、")} 再擲。`,
+      );
+      contenders = tied;
+    }
+    return contenders[0] ?? 0;
   }
 
   /** Snapshot for UI */
@@ -140,6 +187,7 @@ export class TwLandGame {
       hotelsLeft: this.hotelsLeft,
       winnerId: this.winnerId,
       canRollAgain: this.canRollAgain,
+      landedOwnTileId: this.landedOwnTileId,
       log: [...this.log],
     };
   }
@@ -206,6 +254,11 @@ export class TwLandGame {
       p.cash -= amount;
       if (creditor !== "bank") this.players[creditor].cash += amount;
       this.pushLog(`${p.name} 支付 ${amount} 元（${reason}）。`);
+      this.emitFx({
+        type: "toast",
+        tone: "warn",
+        text: `${p.name} −${amount}　${reason}`,
+      });
       return;
     }
     this.debt = { debtor: playerId, creditor, amount, reason };
@@ -243,10 +296,6 @@ export class TwLandGame {
       this.phase = "buy";
       return;
     }
-    if (this.auction) {
-      this.phase = "auction";
-      return;
-    }
     this.enterManageOrContinue();
   }
 
@@ -262,6 +311,11 @@ export class TwLandGame {
       this.winnerId = alive[0].id;
       this.phase = "ended";
       this.pushLog(`${alive[0].name} 勝出！`);
+      this.emitFx({
+        type: "toast",
+        tone: "good",
+        text: `${alive[0].name} 勝出！`,
+      });
       return true;
     }
     return false;
@@ -272,6 +326,7 @@ export class TwLandGame {
     this.canRollAgain = false;
     this.lastDice = null;
     this.pendingBuy = null;
+    this.landedOwnTileId = null;
     const n = this.players.length;
     for (let i = 0; i < n; i++) {
       this.turn = (this.turn + 1) % n;
@@ -280,7 +335,7 @@ export class TwLandGame {
     const p = this.current();
     if (p.jail) {
       this.phase = "jail_turn";
-      this.pushLog(`輪到 ${p.name}（在牢裡）。`);
+      this.pushLog(`輪到 ${p.name}（在牢裡；仍可收租、交易或蓋房）。`);
     } else {
       this.phase = "roll";
       this.pushLog(`輪到 ${p.name}。`);
@@ -319,6 +374,11 @@ export class TwLandGame {
       if (collectGo) {
         p.cash += GO_SALARY;
         this.pushLog(`${p.name} 經過出發，領取 ${GO_SALARY} 元。`);
+        this.emitFx({
+          type: "toast",
+          tone: "good",
+          text: `${p.name} 過出發 +${GO_SALARY}`,
+        });
       }
     }
     if (next < 0) next = (next + 40) % 40;
@@ -336,9 +396,19 @@ export class TwLandGame {
     if (to < p.pos && collectGo) {
       p.cash += GO_SALARY;
       this.pushLog(`${p.name} 經過出發，領取 ${GO_SALARY} 元。`);
+      this.emitFx({
+        type: "toast",
+        tone: "good",
+        text: `${p.name} 過出發 +${GO_SALARY}`,
+      });
     } else if (to === 0 && p.pos !== 0) {
       p.cash += GO_SALARY;
       this.pushLog(`${p.name} 抵達出發，領取 ${GO_SALARY} 元。`);
+      this.emitFx({
+        type: "toast",
+        tone: "good",
+        text: `${p.name} 抵達出發 +${GO_SALARY}`,
+      });
     }
     p.pos = to;
   }
@@ -351,6 +421,7 @@ export class TwLandGame {
     p.doubles = 0;
     this.canRollAgain = false;
     this.pushLog(`${p.name} 進入坐牢。`);
+    this.emitFx({ type: "toast", tone: "warn", text: `${p.name} 進牢` });
   }
 
   // —— land resolve ——
@@ -393,7 +464,13 @@ export class TwLandGame {
         this.phase = "buy";
         return;
       }
-      if (st.owner === playerId || st.mortgaged) {
+      if (st.owner === playerId) {
+        // 台灣版：停在自己的土地上才可於本回合為該色組蓋房
+        this.landedOwnTileId = tile.id;
+        this.enterManageOrContinue();
+        return;
+      }
+      if (st.mortgaged) {
         this.enterManageOrContinue();
         return;
       }
@@ -421,6 +498,12 @@ export class TwLandGame {
     else this.chestIdx = idx + 1;
 
     this.pushLog(`${p.name} 抽到${deck === "chance" ? "機會" : "命運"}：${card.text}`);
+    this.emitFx({
+      type: "card",
+      deck,
+      text: card.text,
+      player: p.name,
+    });
 
     const finish = () => {
       if (this.phase !== "debt") this.enterManageOrContinue();
@@ -515,6 +598,8 @@ export class TwLandGame {
     }
     const p = this.current();
     if (p.bankrupt) return { ok: false, error: "已破產" };
+    // 新一擲：蓋房資格改以落地結果為準
+    this.landedOwnTileId = null;
 
     const d1 = rollDie(this.rng);
     const d2 = rollDie(this.rng);
@@ -622,6 +707,11 @@ export class TwLandGame {
     p.cash -= tile.price;
     this.props[id].owner = p.id;
     this.pushLog(`${p.name} 買下「${tile.name}」，花 ${tile.price} 元。`);
+    this.emitFx({
+      type: "toast",
+      tone: "good",
+      text: `${p.name} 買下「${tile.name}」`,
+    });
     this.pendingBuy = null;
     this.enterManageOrContinue();
     return { ok: true };
@@ -631,102 +721,13 @@ export class TwLandGame {
     if (this.phase !== "buy" || this.pendingBuy == null) {
       return { ok: false, error: "無可拒絕購買" };
     }
-    const id = this.pendingBuy;
+    const tile = tileById(this.pendingBuy);
+    const p = this.current();
     this.pendingBuy = null;
-    this.startAuction(id);
-    return { ok: true };
-  }
-
-  startAuction(tileId) {
-    const alive = this.alivePlayers().map((p) => p.id);
-    this.auction = {
-      tileId,
-      highBid: 0,
-      highBidder: null,
-      turn: alive[0],
-      passed: [],
-    };
-    this.phase = "auction";
-    this.pushLog(`「${tileById(tileId).name}」進入拍賣。`);
-  }
-
-  auctionBid(amount) {
-    if (this.phase !== "auction" || !this.auction) {
-      return { ok: false, error: "不在拍賣中" };
-    }
-    const a = this.auction;
-    const p = this.players[a.turn];
-    if (p.id !== a.turn) return { ok: false, error: "不是你的出價回合" };
-    const bid = Math.floor(Number(amount));
-    if (!Number.isFinite(bid) || bid <= a.highBid) {
-      return { ok: false, error: `出價須高於 ${a.highBid} 元` };
-    }
-    if (p.cash < bid) return { ok: false, error: "現金不足" };
-    a.highBid = bid;
-    a.highBidder = p.id;
-    a.passed = [];
-    this.pushLog(`${p.name} 出價 ${bid} 元。`);
-    this.advanceAuctionTurn();
-    return { ok: true };
-  }
-
-  auctionPass() {
-    if (this.phase !== "auction" || !this.auction) {
-      return { ok: false, error: "不在拍賣中" };
-    }
-    const a = this.auction;
-    const p = this.players[a.turn];
-    if (!a.passed.includes(p.id)) a.passed.push(p.id);
-    this.pushLog(`${p.name} 放棄出價。`);
-
-    const alive = this.alivePlayers().map((x) => x.id);
-    if (a.highBidder != null) {
-      // everyone except high bidder has passed since last bid
-      const others = alive.filter((id) => id !== a.highBidder);
-      if (others.every((id) => a.passed.includes(id))) {
-        this.finishAuction();
-        return { ok: true };
-      }
-    } else if (alive.every((id) => a.passed.includes(id))) {
-      this.pushLog(`無人出價，「${tileById(a.tileId).name}」仍無主。`);
-      this.auction = null;
-      this.enterManageOrContinue();
-      return { ok: true };
-    }
-    this.advanceAuctionTurn();
-    return { ok: true };
-  }
-
-  advanceAuctionTurn() {
-    const a = this.auction;
-    if (!a) return;
-    const alive = this.alivePlayers().map((p) => p.id);
-    let idx = alive.indexOf(a.turn);
-    for (let i = 0; i < alive.length; i++) {
-      idx = (idx + 1) % alive.length;
-      a.turn = alive[idx];
-      // skip if somehow
-      break;
-    }
-  }
-
-  finishAuction() {
-    const a = this.auction;
-    if (!a || a.highBidder == null) return;
-    const p = this.players[a.highBidder];
-    const tile = tileById(a.tileId);
-    if (p.cash < a.highBid) {
-      // shouldn't happen
-      this.pushLog(`${p.name} 無力支付得標價，拍賣作廢。`);
-      this.auction = null;
-      this.enterManageOrContinue();
-      return;
-    }
-    p.cash -= a.highBid;
-    this.props[a.tileId].owner = p.id;
-    this.pushLog(`${p.name} 以 ${a.highBid} 元得標「${tile.name}」。`);
-    this.auction = null;
+    // 台灣版：拒買維持空地，不進入拍賣
+    this.pushLog(`${p.name} 不購買「${tile.name}」，維持空地。`);
     this.enterManageOrContinue();
+    return { ok: true };
   }
 
   // —— build / mortgage ——
@@ -744,6 +745,18 @@ export class TwLandGame {
     if (!this.ownsGroup(playerId, tile.group)) {
       return { ok: false, error: "未集齊同色組（或組內有抵押）" };
     }
+    const p = this.players[playerId];
+    // 台灣版：平時須「停在自己的土地」才可為該色組蓋房；坐牢中不限
+    const inJailManage = p.jail || this.phase === "jail_turn";
+    if (!inJailManage) {
+      if (this.landedOwnTileId == null) {
+        return { ok: false, error: "須停在自己的土地上才能蓋房" };
+      }
+      const landed = tileById(this.landedOwnTileId);
+      if (landed.type !== "property" || landed.group !== tile.group) {
+        return { ok: false, error: "只能在本次停留的同色組蓋房" };
+      }
+    }
     if (st.houses >= 5) return { ok: false, error: "已是旅館" };
     const levels = this.groupHouseLevels(tile.group);
     const min = Math.min(...levels);
@@ -753,16 +766,14 @@ export class TwLandGame {
     } else if (this.housesLeft < 1) {
       return { ok: false, error: "銀行房屋售完" };
     }
-    const p = this.players[playerId];
     if (p.cash < tile.houseCost) return { ok: false, error: "現金不足" };
     return { ok: true };
   }
 
   build(tileId) {
-    if (this.phase !== "manage" && this.phase !== "debt" && this.phase !== "roll") {
-      // allow manage primarily; also debt to raise? building spends money — only manage
+    if (this.phase !== "manage" && this.phase !== "jail_turn") {
+      return { ok: false, error: "現在不能蓋房" };
     }
-    if (this.phase !== "manage") return { ok: false, error: "僅在管理階段可蓋房" };
     const p = this.current();
     const check = this.canBuildOn(p.id, tileId);
     if (!check.ok) return check;
@@ -774,12 +785,22 @@ export class TwLandGame {
       this.hotelsLeft -= 1;
       st.houses = 5;
       this.pushLog(`${p.name} 在「${tile.name}」蓋旅館（${tile.houseCost} 元）。`);
+      this.emitFx({
+        type: "toast",
+        tone: "good",
+        text: `「${tile.name}」升級旅館`,
+      });
     } else {
       this.housesLeft -= 1;
       st.houses += 1;
       this.pushLog(
         `${p.name} 在「${tile.name}」蓋第 ${st.houses} 棟房屋（${tile.houseCost} 元）。`,
       );
+      this.emitFx({
+        type: "toast",
+        tone: "good",
+        text: `「${tile.name}」第 ${st.houses} 棟房屋`,
+      });
     }
     return { ok: true };
   }
@@ -800,7 +821,11 @@ export class TwLandGame {
   }
 
   sellHouse(tileId) {
-    if (this.phase !== "manage" && this.phase !== "debt") {
+    if (
+      this.phase !== "manage" &&
+      this.phase !== "debt" &&
+      this.phase !== "jail_turn"
+    ) {
       return { ok: false, error: "現在不能賣屋" };
     }
     const actor =
@@ -827,7 +852,11 @@ export class TwLandGame {
   }
 
   mortgage(tileId) {
-    if (this.phase !== "manage" && this.phase !== "debt") {
+    if (
+      this.phase !== "manage" &&
+      this.phase !== "debt" &&
+      this.phase !== "jail_turn"
+    ) {
       return { ok: false, error: "現在不能抵押" };
     }
     const actor =
@@ -858,7 +887,9 @@ export class TwLandGame {
   }
 
   unmortgage(tileId) {
-    if (this.phase !== "manage") return { ok: false, error: "僅管理階段可贖回" };
+    if (this.phase !== "manage" && this.phase !== "jail_turn") {
+      return { ok: false, error: "現在不能贖回" };
+    }
     const p = this.current();
     const tile = tileById(tileId);
     const st = this.props[tileId];
@@ -938,7 +969,11 @@ export class TwLandGame {
    * @param {object} proposal
    */
   proposeTrade(proposal) {
-    if (this.phase !== "manage" && this.phase !== "debt") {
+    if (
+      this.phase !== "manage" &&
+      this.phase !== "debt" &&
+      this.phase !== "jail_turn"
+    ) {
       return { ok: false, error: "現在不能交易" };
     }
     const from =

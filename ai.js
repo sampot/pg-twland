@@ -1,6 +1,7 @@
 /**
  * Heuristic AI for hot-seat autopilot (託管).
- * Not optimal — enough to finish games and cover phases.
+ * Aligned with Taiwan paper rules (no auction).
+ * Each step returns `{ ok, action }` so the UI can show what the AI did.
  */
 
 import { BOARD, tileById, isOwnable, GROUP_TILES, JAIL_FINE } from "./board.js";
@@ -8,8 +9,12 @@ import { BOARD, tileById, isOwnable, GROUP_TILES, JAIL_FINE } from "./board.js";
 const CASH_RESERVE = 120;
 
 /**
+ * @typedef {{ ok: boolean, action?: string, error?: string }} AiResult
+ */
+
+/**
  * @param {import('./engine.js').TwLandGame} game
- * @returns {{ ok: boolean, error?: string } | null} null = no AI actor this phase
+ * @returns {AiResult | null} null = no AI actor this phase
  */
 export function aiStep(game) {
   const actorId = actingPlayerId(game);
@@ -19,13 +24,11 @@ export function aiStep(game) {
 
   switch (game.phase) {
     case "roll":
-      return game.roll();
+      return withDice(game, game.roll(), "擲骰");
     case "jail_turn":
       return aiJail(game, p);
     case "buy":
       return aiBuy(game, p);
-    case "auction":
-      return aiAuction(game, p);
     case "debt":
       return aiDebt(game, p);
     case "manage":
@@ -36,13 +39,12 @@ export function aiStep(game) {
 }
 
 /**
- * Who must act now (may differ from turn owner in auction／debt／trade).
+ * Who must act now (may differ from turn owner in debt／trade).
  * @param {import('./engine.js').TwLandGame} game
  */
 export function actingPlayerId(game) {
   if (!game || game.phase === "ended" || game.phase === "lobby") return null;
   if (game.trade) return game.trade.to;
-  if (game.phase === "auction" && game.auction) return game.auction.turn;
   if (game.phase === "debt" && game.debt) return game.debt.debtor;
   return game.turn;
 }
@@ -57,19 +59,60 @@ export function needsAiStep(game) {
   return Boolean(p && p.ai && !p.bankrupt);
 }
 
-function aiJail(game, p) {
-  if (p.jailCards > 0) return game.jailCard();
-  if (p.cash >= JAIL_FINE + CASH_RESERVE) return game.jailPay();
-  return game.jailRoll();
+/**
+ * @param {import('./engine.js').TwLandGame} game
+ * @param {{ ok: boolean, error?: string, dice?: [number, number] }} result
+ * @param {string} fallback
+ * @returns {AiResult}
+ */
+function withDice(game, result, fallback) {
+  if (!result.ok) return { ...result, action: fallback };
+  const d = result.dice || game.lastDice;
+  if (d) {
+    const sum = d[0] + d[1];
+    const dub = d[0] === d[1] ? "（雙子）" : "";
+    return { ok: true, action: `${fallback} ${d[0]}+${d[1]}=${sum}${dub}` };
+  }
+  return { ok: true, action: fallback };
 }
 
+/**
+ * @param {import('./engine.js').TwLandGame} game
+ * @param {object} p
+ * @returns {AiResult}
+ */
+function aiJail(game, p) {
+  // One visible improve step per tick, then exit next tick
+  const improved = tryImprove(game, p);
+  if (improved) return { ok: true, action: improved };
+
+  if (p.jailCards > 0) {
+    const r = game.jailCard();
+    return { ...r, action: "使用免費出獄卡" };
+  }
+  if (p.cash >= JAIL_FINE + CASH_RESERVE) {
+    const r = game.jailPay();
+    return { ...r, action: `繳 ${JAIL_FINE} 元出獄` };
+  }
+  return withDice(game, game.jailRoll(), "坐牢中試擲雙子");
+}
+
+/**
+ * @param {import('./engine.js').TwLandGame} game
+ * @param {object} p
+ * @returns {AiResult}
+ */
 function aiBuy(game, p) {
   const id = game.pendingBuy;
-  if (id == null) return { ok: false, error: "無可購買地產" };
+  if (id == null) return { ok: false, error: "無可購買地產", action: "購買失敗" };
   const tile = tileById(id);
   const want = shouldBuy(game, p, tile);
-  if (want && p.cash >= tile.price) return game.buy();
-  return game.declineBuy();
+  if (want && p.cash >= tile.price) {
+    const r = game.buy();
+    return { ...r, action: `買下「${tile.name}」（${tile.price} 元）` };
+  }
+  const r = game.declineBuy();
+  return { ...r, action: `不買「${tile.name}」，維持空地` };
 }
 
 function shouldBuy(game, p, tile) {
@@ -77,13 +120,15 @@ function shouldBuy(game, p, tile) {
   const after = p.cash - tile.price;
   if (after < 50) return false;
 
-  if (tile.type === "railroad") return after >= CASH_RESERVE || countOwned(game, p.id, "railroad") >= 1;
+  if (tile.type === "railroad") {
+    return after >= CASH_RESERVE || countOwned(game, p.id, "railroad") >= 1;
+  }
   if (tile.type === "utility") return after >= CASH_RESERVE + 50;
 
   if (tile.type === "property" && tile.group) {
     const ids = GROUP_TILES[tile.group] || [];
     const owned = ids.filter((tid) => game.props[tid]?.owner === p.id).length;
-    if (owned >= 1) return true; // chase monopoly
+    if (owned >= 1) return true;
     if (tile.price <= 160 && after >= CASH_RESERVE) return true;
     if (after >= CASH_RESERVE + 80) return true;
     return false;
@@ -97,50 +142,27 @@ function countOwned(game, playerId, type) {
   ).length;
 }
 
-function aiAuction(game, p) {
-  const a = game.auction;
-  if (!a) return { ok: false, error: "不在拍賣中" };
-  const tile = tileById(a.tileId);
-
-  // Already winning — pass to let auction close when others pass.
-  if (a.highBidder === p.id) return game.auctionPass();
-
-  const maxBid = maxWillingBid(game, p, tile);
-  const next = a.highBid + Math.max(10, Math.floor((tile.price || 100) * 0.05));
-  if (next <= maxBid && p.cash >= next) {
-    return game.auctionBid(next);
-  }
-  return game.auctionPass();
-}
-
-function maxWillingBid(game, p, tile) {
-  if (!tile.price) return 0;
-  let cap = Math.floor(tile.price * 0.85);
-  if (tile.type === "property" && tile.group) {
-    const ids = GROUP_TILES[tile.group] || [];
-    const owned = ids.filter((tid) => game.props[tid]?.owner === p.id).length;
-    if (owned >= 1) cap = Math.floor(tile.price * 1.15);
-  }
-  if (tile.type === "railroad" && countOwned(game, p.id, "railroad") >= 1) {
-    cap = Math.floor(tile.price * 1.1);
-  }
-  return Math.min(cap, Math.max(0, p.cash - CASH_RESERVE));
-}
-
+/**
+ * @param {import('./engine.js').TwLandGame} game
+ * @param {object} p
+ * @returns {AiResult}
+ */
 function aiDebt(game, p) {
-  // Prefer selling hotels/houses, then mortgage cheap tiles, else bankrupt.
   const withHouses = BOARD.filter((t) => {
     if (t.type !== "property") return false;
     const st = game.props[t.id];
     return st?.owner === p.id && st.houses > 0;
   });
-  // Sell from highest house count groups (engine enforces even sell)
   withHouses.sort(
     (a, b) => (game.props[b.id].houses || 0) - (game.props[a.id].houses || 0),
   );
   for (const t of withHouses) {
+    const before = game.props[t.id].houses;
     const r = game.sellHouse(t.id);
-    if (r.ok) return r;
+    if (r.ok) {
+      const label = before === 5 ? "拆旅館為 4 房" : "拆一棟房屋";
+      return { ok: true, action: `欠債籌款：${label}（${t.name}）` };
+    }
   }
 
   const mortgagable = BOARD.filter((t) => {
@@ -155,28 +177,45 @@ function aiDebt(game, p) {
 
   for (const t of mortgagable) {
     const r = game.mortgage(t.id);
-    if (r.ok) return r;
+    if (r.ok) {
+      return { ok: true, action: `欠債籌款：抵押「${t.name}」` };
+    }
   }
 
-  return game.declareBankrupt();
+  const r = game.declareBankrupt();
+  return { ...r, action: "宣告破產" };
 }
 
+/**
+ * @param {import('./engine.js').TwLandGame} game
+ * @param {object} p
+ * @returns {AiResult | null}
+ */
 function aiManage(game, p) {
   if (game.trade) {
-    // Simple: never accept trades offered to AI
-    if (game.trade.to === p.id) return game.rejectTrade();
+    if (game.trade.to === p.id) {
+      const r = game.rejectTrade();
+      return { ...r, action: "拒絕交易提案" };
+    }
     return null;
   }
 
-  // Light build / unmortgage then continue turn
-  tryImprove(game, p);
+  const improved = tryImprove(game, p);
+  if (improved) return { ok: true, action: improved };
 
-  if (game.canRollAgain) return game.roll();
-  return game.endTurn();
+  if (game.canRollAgain) {
+    return withDice(game, game.roll(), "雙子再擲");
+  }
+  const r = game.endTurn();
+  return { ...r, action: "結束回合" };
 }
 
+/**
+ * @param {import('./engine.js').TwLandGame} game
+ * @param {object} p
+ * @returns {string | null}
+ */
 function tryImprove(game, p) {
-  // Unmortgage if flush
   if (p.cash > CASH_RESERVE + 200) {
     const mort = BOARD.filter((t) => {
       const st = game.props[t.id];
@@ -186,15 +225,18 @@ function tryImprove(game, p) {
       const cost = Math.ceil(((t.price || 0) / 2) * 1.1);
       if (p.cash - cost < CASH_RESERVE) break;
       const r = game.unmortgage(t.id);
-      if (r.ok) return;
+      if (r.ok) return `贖回「${t.name}」（${cost} 元）`;
     }
   }
 
-  // Build one house if monopoly and cash allows
-  if (p.cash < CASH_RESERVE + 100) return;
+  if (p.cash < CASH_RESERVE + 100) return null;
   for (const group of Object.keys(GROUP_TILES)) {
     const ids = GROUP_TILES[group];
-    if (!ids.every((id) => game.props[id]?.owner === p.id && !game.props[id].mortgaged)) {
+    if (
+      !ids.every(
+        (id) => game.props[id]?.owner === p.id && !game.props[id].mortgaged,
+      )
+    ) {
       continue;
     }
     const levels = ids.map((id) => game.props[id].houses);
@@ -206,7 +248,11 @@ function tryImprove(game, p) {
     if (!check.ok) continue;
     const tile = tileById(targetId);
     if (p.cash - tile.houseCost < CASH_RESERVE) continue;
-    game.build(targetId);
-    return;
+    const before = game.props[targetId].houses;
+    const r = game.build(targetId);
+    if (!r.ok) continue;
+    if (before === 4) return `在「${tile.name}」蓋旅館`;
+    return `在「${tile.name}」蓋第 ${before + 1} 棟房屋`;
   }
+  return null;
 }
