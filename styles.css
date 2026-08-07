@@ -810,6 +810,115 @@ button.ghost {
   letter-spacing: 0.04em;
 }
 
+.cell--go {
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in oklab, #16a34a 14%, var(--cell)),
+      var(--cell)
+    );
+}
+
+.cell--jail {
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in oklab, #78716c 16%, var(--cell)),
+      var(--cell)
+    );
+}
+
+.cell--parking {
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in oklab, #2563eb 12%, var(--cell)),
+      var(--cell)
+    );
+}
+
+.cell--gotojail {
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in oklab, #dc2626 12%, var(--cell)),
+      var(--cell)
+    );
+}
+
+.corner-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 2.35rem;
+  height: 2.35rem;
+  border-radius: 0.65rem;
+  border: 1px solid color-mix(in oklab, var(--line) 80%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in oklab, #fff 35%, transparent);
+}
+
+.corner-icon svg {
+  display: block;
+  width: 1.35rem;
+  height: 1.35rem;
+}
+
+.corner-icon--go {
+  color: #15803d;
+  background: color-mix(in oklab, #16a34a 14%, var(--panel));
+  border-color: color-mix(in oklab, #16a34a 35%, var(--line));
+}
+
+.corner-icon--jail {
+  color: #57534e;
+  background: color-mix(in oklab, #78716c 14%, var(--panel));
+  border-color: color-mix(in oklab, #78716c 35%, var(--line));
+}
+
+.corner-icon--parking {
+  color: #1d4ed8;
+  background: color-mix(in oklab, #2563eb 12%, var(--panel));
+  border-color: color-mix(in oklab, #2563eb 35%, var(--line));
+}
+
+.corner-icon--gotojail {
+  color: #b91c1c;
+  background: color-mix(in oklab, #dc2626 12%, var(--panel));
+  border-color: color-mix(in oklab, #dc2626 35%, var(--line));
+}
+
+.swatch--go {
+  background: #16a34a !important;
+}
+
+.swatch--jail {
+  background: #78716c !important;
+}
+
+.swatch--parking {
+  background: #2563eb !important;
+}
+
+.swatch--gotojail {
+  background: #dc2626 !important;
+}
+
+@media (prefers-color-scheme: dark) {
+  .corner-icon--go {
+    color: #4ade80;
+  }
+  .corner-icon--jail {
+    color: #a8a29e;
+  }
+  .corner-icon--parking {
+    color: #60a5fa;
+  }
+  .corner-icon--gotojail {
+    color: #f87171;
+  }
+}
+
 .cell .swatch {
   display: block;
   width: 0.42rem;
@@ -1552,6 +1661,51 @@ button.ghost {
     margin-right: 0.12rem;
     font-size: 0.58rem;
     border-radius: 0.18rem;
+  }
+
+  .cell.corner {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-start;
+    gap: 0.15rem;
+    min-height: 4.2rem;
+    padding: 0.28rem;
+  }
+
+  .cell.corner .swatch {
+    display: none;
+  }
+
+  .cell.corner .corner-icon {
+    width: 100%;
+    height: auto;
+    aspect-ratio: 1;
+    max-height: 2.4rem;
+    margin: 0 auto;
+    border-radius: 0.4rem;
+  }
+
+  .cell.corner .corner-icon svg {
+    width: 1.45rem;
+    height: 1.45rem;
+  }
+
+  .cell.corner .cell-body {
+    padding-top: 0;
+    text-align: center;
+  }
+
+  .cell.corner .name {
+    font-size: 0.72rem;
+  }
+
+  .cell.corner .sub {
+    font-size: 0.55rem;
+  }
+
+  .cell.corner .tokens {
+    justify-content: center;
   }
 
   .sheet {

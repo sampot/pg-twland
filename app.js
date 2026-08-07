@@ -1,4 +1,4 @@
-import { BOARD, GROUP_COLOR, tileById, isOwnable } from "./board.js";
+import { BOARD, GROUP_COLOR, tileById, isOwnable, GO_SALARY } from "./board.js";
 import { TwLandGame } from "./engine.js";
 import { aiStep, needsAiStep, actingPlayerId } from "./ai.js";
 import {
@@ -176,6 +176,46 @@ function buildingsMarkup(n, { compact = false } = {}) {
     () => `<span class="bld bld--house" aria-hidden="true"></span>`,
   ).join("");
   return `<span class="${cls}" title="${label}" aria-label="${label}">${houses}<span class="bld-count">${count}房</span></span>`;
+}
+
+/** Corner tile icons (出發／坐牢／免費停車／去坐牢). */
+function cornerSvgPath(type) {
+  switch (type) {
+    case "go":
+      return `
+        <circle cx="16" cy="16" r="12.2" fill="none" stroke="currentColor" stroke-width="2"/>
+        <path fill="currentColor" d="M9.2 15.2h9.2l-2.4-2.4 1.5-1.5 5 5-5 5-1.5-1.5 2.4-2.4H9.2z"/>
+        <path fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" d="M8.5 21.5c2.2 2 5 3.1 7.8 3.1"/>`;
+    case "jail":
+      return `
+        <rect x="6.5" y="5.5" width="19" height="21" rx="1.8" fill="none" stroke="currentColor" stroke-width="2"/>
+        <path fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" d="M11 6v19.5M16 6v19.5M21 6v19.5"/>
+        <circle cx="16" cy="15.5" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6"/>
+        <path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" d="M16 18.7v4.2"/>`;
+    case "parking":
+      return `
+        <rect x="5.5" y="6" width="21" height="20" rx="2.2" fill="none" stroke="currentColor" stroke-width="2"/>
+        <path fill="currentColor" d="M11.2 10.2h5.4c2.6 0 4.4 1.6 4.4 4.05S19.2 18.3 16.6 18.3H13.5V22h-2.3V10.2zm2.3 2.15v3.8h2.85c1.15 0 1.95-.65 1.95-1.9s-.8-1.9-1.95-1.9H13.5z"/>
+        <path fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" d="M7.2 24.5h17.6"/>`;
+    case "gotojail":
+      return `
+        <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M7 11.5h9.5l4.2-4.2M16.5 11.5v13"/>
+        <path fill="currentColor" d="M22.2 6.2 27 11l-4.8 4.8-1.45-1.45L24.1 11l-3.35-3.35z"/>
+        <rect x="6" y="20.2" width="9.2" height="6.2" rx="1" fill="none" stroke="currentColor" stroke-width="1.7"/>
+        <path fill="none" stroke="currentColor" stroke-width="1.4" d="M8.2 20.2v6.2M11.2 20.2v6.2"/>`;
+    default:
+      return "";
+  }
+}
+
+/**
+ * @param {'go'|'jail'|'parking'|'gotojail'} type
+ * @param {string} [label]
+ */
+function cornerIconMarkup(type, label = "") {
+  const svg = cornerSvgPath(type);
+  if (!svg) return "";
+  return `<span class="corner-icon corner-icon--${type}" title="${escapeAttr(label)}" aria-hidden="true"><svg width="28" height="28" viewBox="0 0 32 32">${svg}</svg></span>`;
 }
 
 const PHASE_ZH = {
@@ -464,7 +504,7 @@ function buildBoardShell() {
       tile.type === "jail" ||
       tile.type === "parking" ||
       tile.type === "gotojail"
-        ? " corner"
+        ? ` corner cell--${tile.type}`
         : "") +
       (tile.type === "chance" ? " cell--chance" : "") +
       (tile.type === "chest" ? " cell--chest" : "");
@@ -566,6 +606,10 @@ function paintBoard() {
     let sub = "";
     if (tile.price != null) sub = money(tile.price);
     if (tile.type === "tax") sub = money(tile.tax);
+    if (tile.type === "go") sub = `過格 +${GO_SALARY}`;
+    if (tile.type === "jail") sub = "只是探監／坐牢";
+    if (tile.type === "parking") sub = "休息一回合位";
+    if (tile.type === "gotojail") sub = "立刻送進牢房";
     if (tile.type === "chance") sub = "抽機會卡";
     if (tile.type === "chest") sub = "抽命運卡";
     if (st?.owner != null && !st.mortgaged && tile.price != null) {
@@ -587,6 +631,14 @@ function paintBoard() {
         ? `<span class="owner-dot" style="background:${TOKEN_COLORS[st.owner % TOKEN_COLORS.length]}" title="${escapeAttr(game.players[st.owner].name)}"></span>`
         : "";
 
+    const isCorner =
+      tile.type === "go" ||
+      tile.type === "jail" ||
+      tile.type === "parking" ||
+      tile.type === "gotojail";
+
+    const cornerIcon = isCorner ? cornerIconMarkup(tile.type, tile.name) : "";
+
     const swatch =
       tile.group && GROUP_COLOR[tile.group]
         ? `<span class="swatch" style="background:${GROUP_COLOR[tile.group]}"></span>`
@@ -594,7 +646,9 @@ function paintBoard() {
           ? `<span class="swatch swatch--chance"></span>`
           : tile.type === "chest"
             ? `<span class="swatch swatch--chest"></span>`
-            : `<span class="swatch" style="background:transparent"></span>`;
+            : isCorner
+              ? `<span class="swatch swatch--corner swatch--${tile.type}"></span>`
+              : `<span class="swatch" style="background:transparent"></span>`;
 
     const deckBadge =
       tile.type === "chance"
@@ -620,7 +674,7 @@ function paintBoard() {
       })
       .join("");
 
-    el.innerHTML = `${swatch}<span class="cell-body"><span class="name">${ownerDot}${deckBadge}${tile.name}</span>${buildings}<span class="sub">${sub || "—"}</span></span><span class="tokens">${tokens}</span>`;
+    el.innerHTML = `${swatch}${cornerIcon}<span class="cell-body"><span class="name">${ownerDot}${deckBadge}${tile.name}</span>${buildings}<span class="sub">${sub || "—"}</span></span><span class="tokens">${tokens}</span>`;
   }
 
   if (movedThisPaint) sfx.move();
