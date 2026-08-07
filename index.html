@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <meta
+      name="description"
+      content="台灣路名紙本地產環：買地蓋房、機會命運、拍賣交易。純前端 Playgrounds SAM。"
+    />
+    <title>台灣路名地產</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main>
+      <header class="hero">
+        <h1>台灣路名地產</h1>
+        <p class="tagline">紙本規則 · 台灣路名 · 熱座 2–4 人</p>
+      </header>
+
+      <section id="lobby" class="panel" aria-label="開局">
+        <label class="field">
+          <span>人數</span>
+          <select id="player-count">
+            <option value="2" selected>2</option>
+            <option value="3">3</option>
+            <option value="4">4</option>
+          </select>
+        </label>
+        <div id="name-fields" class="name-fields"></div>
+        <button type="button" id="btn-start" class="primary">開始</button>
+        <p class="hint">
+          經典紙本機制（買地、拍賣、蓋房、抵押、交易、破產）。金額單位為「元」，價位可再調。
+        </p>
+      </section>
+
+      <section id="game" class="game" hidden>
+        <div class="status-bar" role="status">
+          <div>
+            <span class="label">階段</span>
+            <strong id="phase-label">—</strong>
+          </div>
+          <div>
+            <span class="label">骰子</span>
+            <strong id="dice-label">—</strong>
+          </div>
+          <div>
+            <span class="label">房屋／旅館庫存</span>
+            <strong id="stock-label">—</strong>
+          </div>
+        </div>
+
+        <div id="players" class="players" aria-label="玩家"></div>
+
+        <div class="board-wrap">
+          <div id="board" class="board" role="list" aria-label="棋盤"></div>
+        </div>
+
+        <p id="prompt" class="prompt" role="status"></p>
+
+        <div id="actions" class="actions" aria-label="操作"></div>
+
+        <details class="panel log-panel">
+          <summary>對局日誌</summary>
+          <ol id="log" class="log" reversed></ol>
+        </details>
+
+        <button type="button" id="btn-new" class="secondary ghost">回開局畫面</button>
+      </section>
+    </main>
+
+    <div id="sheet" class="sheet" hidden>
+      <div class="sheet-card" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
+        <h2 id="sheet-title"></h2>
+        <div id="sheet-body"></div>
+        <div id="sheet-actions" class="sheet-actions"></div>
+      </div>
+    </div>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>

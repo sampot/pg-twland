@@ -1,0 +1,455 @@
+:root {
+  color-scheme: light dark;
+  --bg: #f3f1ec;
+  --panel: #fffdf8;
+  --text: #1a1c1e;
+  --muted: #5c6570;
+  --line: #d5d0c6;
+  --accent: #0f5c4c;
+  --accent-dim: #0a4036;
+  --on-accent: #ffffff;
+  --danger: #b42318;
+  --warn: #b54708;
+  --token-0: #e11d48;
+  --token-1: #2563eb;
+  --token-2: #ca8a04;
+  --token-3: #16a34a;
+  --board-bg: #0f3d2e;
+  --board-line: #1a5c45;
+  --cell: #f7f3ea;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0c1014;
+    --panel: #151b22;
+    --text: #e8ecf1;
+    --muted: #9aa3ad;
+    --line: #2a313a;
+    --accent: #2dd4bf;
+    --accent-dim: #0f766e;
+    --on-accent: #042f2e;
+    --cell: #1a222c;
+    --board-bg: #06261c;
+    --board-line: #0f3d2e;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100dvh;
+  font-family:
+    "Avenir Next",
+    "Segoe UI",
+    "PingFang TC",
+    "Noto Sans TC",
+    sans-serif;
+  background:
+    radial-gradient(
+      800px 420px at 80% -5%,
+      color-mix(in oklab, var(--accent) 16%, transparent),
+      transparent 55%
+    ),
+    radial-gradient(
+      600px 360px at 0% 100%,
+      color-mix(in oklab, #c4a574 14%, transparent),
+      transparent 50%
+    ),
+    var(--bg);
+  color: var(--text);
+}
+
+main {
+  width: min(100%, 40rem);
+  margin: 0 auto;
+  padding: 1rem 0.85rem 2.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.hero h1 {
+  margin: 0;
+  font-family:
+    "Iowan Old Style",
+    Palatino,
+    "Songti TC",
+    serif;
+  font-size: clamp(1.65rem, 5vw, 2.1rem);
+  letter-spacing: 0.06em;
+  text-align: center;
+}
+
+.tagline {
+  margin: 0.35rem 0 0;
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+  padding: 0.9rem 1rem;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-bottom: 0.75rem;
+  font-size: 0.92rem;
+}
+
+.field span {
+  color: var(--muted);
+}
+
+select,
+input[type="text"],
+input[type="number"] {
+  min-height: 44px;
+  padding: 0.55rem 0.7rem;
+  border-radius: 0.55rem;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+}
+
+.name-fields {
+  display: grid;
+  gap: 0.55rem;
+  margin-bottom: 0.85rem;
+}
+
+.hint {
+  margin: 0.75rem 0 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+  line-height: 1.45;
+}
+
+button {
+  min-height: 44px;
+  padding: 0.55rem 0.95rem;
+  border-radius: 0.55rem;
+  border: 1px solid transparent;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+button.primary {
+  background: var(--accent);
+  color: var(--on-accent);
+  width: 100%;
+}
+
+button.secondary {
+  background: color-mix(in oklab, var(--accent) 12%, var(--panel));
+  color: var(--text);
+  border-color: var(--line);
+}
+
+button.danger {
+  background: color-mix(in oklab, var(--danger) 14%, var(--panel));
+  color: var(--danger);
+  border-color: color-mix(in oklab, var(--danger) 35%, var(--line));
+}
+
+button.ghost {
+  width: 100%;
+  margin-top: 0.5rem;
+  background: transparent;
+  border-color: var(--line);
+  color: var(--muted);
+}
+
+.status-bar {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.5rem;
+  padding: 0.7rem 0.8rem;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+  font-size: 0.82rem;
+}
+
+.status-bar .label {
+  display: block;
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.players {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.player-card {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 0.55rem;
+  align-items: center;
+  padding: 0.55rem 0.7rem;
+  border-radius: 0.65rem;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  font-size: 0.88rem;
+}
+
+.player-card.active {
+  outline: 2px solid var(--accent);
+}
+
+.player-card.broke {
+  opacity: 0.45;
+}
+
+.token {
+  width: 1.15rem;
+  height: 1.15rem;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 1px var(--line);
+}
+
+.player-card .meta {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.board-wrap {
+  overflow: auto;
+  border-radius: 0.75rem;
+  border: 1px solid var(--line);
+  background: var(--board-bg);
+  -webkit-overflow-scrolling: touch;
+}
+
+.board {
+  display: grid;
+  grid-template-columns: repeat(11, minmax(4.2rem, 1fr));
+  grid-template-rows: repeat(11, minmax(3.4rem, auto));
+  gap: 1px;
+  background: var(--board-line);
+  min-width: 46rem;
+  padding: 1px;
+}
+
+.cell {
+  position: relative;
+  background: var(--cell);
+  color: var(--text);
+  padding: 0.2rem;
+  font-size: 0.62rem;
+  line-height: 1.2;
+  min-height: 3.4rem;
+  text-align: left;
+  border: 0;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.cell .name {
+  font-weight: 700;
+  font-size: 0.68rem;
+}
+
+.cell .sub {
+  color: var(--muted);
+}
+
+.cell .swatch {
+  display: block;
+  height: 0.35rem;
+  margin: -0.2rem -0.2rem 0.25rem;
+  border-radius: 0;
+}
+
+.cell .tokens {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  margin-top: 0.15rem;
+}
+
+.cell .tokens span {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 50%;
+  border: 1px solid #fff;
+}
+
+.cell.corner {
+  font-size: 0.7rem;
+}
+
+.cell.center-slot {
+  grid-column: 2 / 11;
+  grid-row: 2 / 11;
+  background:
+    linear-gradient(
+      145deg,
+      color-mix(in oklab, var(--accent) 25%, var(--board-bg)),
+      var(--board-bg)
+    );
+  color: #e8fff6;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  cursor: default;
+  pointer-events: none;
+  font-family:
+    "Iowan Old Style",
+    Palatino,
+    "Songti TC",
+    serif;
+  font-size: 1.25rem;
+  letter-spacing: 0.12em;
+}
+
+.prompt {
+  margin: 0;
+  padding: 0.75rem 0.85rem;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 0.65rem;
+  font-size: 0.95rem;
+  line-height: 1.4;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.actions button {
+  flex: 1 1 calc(50% - 0.45rem);
+  min-width: 8rem;
+}
+
+.log-panel summary {
+  cursor: pointer;
+  font-weight: 600;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+}
+
+.log {
+  margin: 0.5rem 0 0;
+  padding-left: 1.1rem;
+  max-height: 12rem;
+  overflow: auto;
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+
+.sheet {
+  position: fixed;
+  inset: 0;
+  background: color-mix(in oklab, #000 45%, transparent);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 0.75rem;
+  z-index: 20;
+}
+
+.sheet[hidden] {
+  display: none !important;
+}
+
+.sheet-card {
+  width: min(100%, 28rem);
+  max-height: min(85dvh, 40rem);
+  overflow: auto;
+  background: var(--panel);
+  border-radius: 0.9rem 0.9rem 0.5rem 0.5rem;
+  border: 1px solid var(--line);
+  padding: 1rem 1rem 1.1rem;
+}
+
+.sheet-card h2 {
+  margin: 0 0 0.65rem;
+  font-size: 1.1rem;
+}
+
+.sheet-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-top: 0.85rem;
+}
+
+.sheet-actions button {
+  flex: 1 1 auto;
+}
+
+.tile-list {
+  display: grid;
+  gap: 0.35rem;
+  max-height: 12rem;
+  overflow: auto;
+}
+
+.tile-row {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-height: 44px;
+  padding: 0.35rem 0.45rem;
+  border-radius: 0.45rem;
+  border: 1px solid var(--line);
+  font-size: 0.85rem;
+}
+
+.tile-row input {
+  width: 1.1rem;
+  height: 1.1rem;
+}
+
+.trade-grid {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.trade-col h3 {
+  margin: 0 0 0.35rem;
+  font-size: 0.9rem;
+}
+
+@media (min-width: 720px) {
+  main {
+    width: min(100%, 52rem);
+  }
+
+  .actions button {
+    flex: 0 1 auto;
+  }
+
+  .sheet {
+    align-items: center;
+  }
+
+  .sheet-card {
+    border-radius: 0.9rem;
+  }
+}
