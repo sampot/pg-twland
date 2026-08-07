@@ -367,6 +367,10 @@ function openSheet(title, body, buttons) {
 
 function renderNameFields() {
   const n = Number(playerCountSel.value);
+  const preserve = [...nameFields.querySelectorAll("input[type='text']")].map(
+    (el) => /** @type {HTMLInputElement} */ (el).value,
+  );
+  const names = pickDefaultNames(n, preserve);
   nameFields.innerHTML = "";
   for (let i = 0; i < n; i++) {
     const wrap = document.createElement("div");
@@ -383,7 +387,8 @@ function renderNameFields() {
     const input = document.createElement("input");
     input.type = "text";
     input.maxLength = 12;
-    input.placeholder = `玩家 ${i + 1}`;
+    input.value = names[i];
+    input.placeholder = names[i];
     input.dataset.idx = String(i);
     input.autocomplete = "nickname";
     label.appendChild(input);
