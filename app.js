@@ -1226,7 +1226,7 @@ function openTradeSheet(fromDebt = false) {
 
   const offerList = document.createElement("div");
   offerList.className = "tile-list";
-    offerList.innerHTML = "<h3>你出讓的地（無房屋）</h3>";
+  offerList.innerHTML = "<h3>你出讓的地（無房屋）</h3>";
   for (const t of ownedTiles(from, { bareOnly: true })) {
     const row = document.createElement("label");
     row.className = "tile-row";
