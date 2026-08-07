@@ -30,7 +30,8 @@
         <div id="name-fields" class="name-fields"></div>
         <button type="button" id="btn-start" class="primary">開始</button>
         <p class="hint">
-          經典紙本機制（買地、拍賣、蓋房、抵押、交易、破產）。金額單位為「元」，價位可再調。
+          經典紙本機制（買地、拍賣、蓋房、抵押、交易、破產）。金額單位為「元」。可將任一玩家「託管
+          AI」自動玩；對局中也能隨時收回。
         </p>
       </section>
 
@@ -45,32 +46,47 @@
             <strong id="dice-label">—</strong>
           </div>
           <div>
-            <span class="label">房屋／旅館庫存</span>
+            <span class="label">房／旅</span>
             <strong id="stock-label">—</strong>
           </div>
         </div>
 
         <div id="players" class="players" aria-label="玩家"></div>
 
-        <div class="board-wrap">
-          <div id="board" class="board" role="list" aria-label="棋盤"></div>
+        <!-- Primary controls first in reading order; sticky dock on narrow screens -->
+        <div class="action-dock">
+          <p id="prompt" class="prompt" role="status"></p>
+          <div id="actions" class="actions" aria-label="操作"></div>
         </div>
 
-        <p id="prompt" class="prompt" role="status"></p>
-
-        <div id="actions" class="actions" aria-label="操作"></div>
+        <div class="board-section">
+          <div class="board-head">
+            <h2 class="board-title">棋盤</h2>
+            <p class="board-hint" id="board-hint">直向列表 · 點格看詳情</p>
+          </div>
+          <div class="board-wrap">
+            <div id="board" class="board" role="list" aria-label="棋盤"></div>
+          </div>
+        </div>
 
         <details class="panel log-panel">
           <summary>對局日誌</summary>
           <ol id="log" class="log" reversed></ol>
         </details>
 
-        <button type="button" id="btn-new" class="secondary ghost">回開局畫面</button>
+        <button type="button" id="btn-new" class="secondary ghost">
+          回開局畫面
+        </button>
       </section>
     </main>
 
     <div id="sheet" class="sheet" hidden>
-      <div class="sheet-card" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
+      <div
+        class="sheet-card"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="sheet-title"
+      >
         <h2 id="sheet-title"></h2>
         <div id="sheet-body"></div>
         <div id="sheet-actions" class="sheet-actions"></div>

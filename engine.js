@@ -33,6 +33,7 @@ export class TwLandGame {
    * @param {object} opts
    * @param {number} [opts.playerCount]
    * @param {string[]} [opts.names]
+   * @param {boolean[]} [opts.aiFlags]
    * @param {() => number} [opts.rng]
    */
   constructor(opts = {}) {
@@ -49,6 +50,7 @@ export class TwLandGame {
 
     const n = Math.min(4, Math.max(2, opts.playerCount ?? 2));
     const names = opts.names ?? [];
+    const aiFlags = opts.aiFlags ?? [];
     this.players = Array.from({ length: n }, (_, i) => ({
       id: i,
       name: names[i] || `玩家 ${i + 1}`,
@@ -59,6 +61,8 @@ export class TwLandGame {
       jailCards: 0,
       bankrupt: false,
       doubles: 0,
+      /** When true, UI autopilot drives this seat. */
+      ai: Boolean(aiFlags[i]),
     }));
 
     /** @type {Record<number, {owner: number|null, houses: number, mortgaged: boolean}>} */
@@ -95,6 +99,21 @@ export class TwLandGame {
 
   current() {
     return this.players[this.turn];
+  }
+
+  /**
+   * Toggle AI custody for a seat (hot-seat autopilot).
+   * @param {number} playerId
+   * @param {boolean} on
+   */
+  setPlayerAi(playerId, on) {
+    const p = this.players[playerId];
+    if (!p || p.bankrupt) return { ok: false, error: "無法託管" };
+    p.ai = Boolean(on);
+    this.pushLog(
+      p.ai ? `${p.name} 已託管給 AI。` : `${p.name} 已收回手動操作。`,
+    );
+    return { ok: true };
   }
 
   start() {
@@ -488,7 +507,12 @@ export class TwLandGame {
   // —— actions ——
 
   roll() {
-    if (this.phase !== "roll") return { ok: false, error: "現在不能擲骰" };
+    if (
+      this.phase !== "roll" &&
+      !(this.phase === "manage" && this.canRollAgain)
+    ) {
+      return { ok: false, error: "現在不能擲骰" };
+    }
     const p = this.current();
     if (p.bankrupt) return { ok: false, error: "已破產" };
 

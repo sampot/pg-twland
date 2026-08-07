@@ -1,8 +1,12 @@
 import { BOARD, GROUP_COLOR, tileById, isOwnable } from "./board.js";
 import { TwLandGame } from "./engine.js";
+import { aiStep, needsAiStep, actingPlayerId } from "./ai.js";
 
 /** @type {TwLandGame | null} */
 let game = null;
+/** @type {ReturnType<typeof setTimeout> | null} */
+let aiTimer = null;
+const AI_STEP_MS = 700;
 
 const lobbyEl = document.getElementById("lobby");
 const gameEl = document.getElementById("game");
@@ -106,6 +110,9 @@ function renderNameFields() {
   const n = Number(playerCountSel.value);
   nameFields.innerHTML = "";
   for (let i = 0; i < n; i++) {
+    const wrap = document.createElement("div");
+    wrap.className = "seat-setup";
+
     const label = document.createElement("label");
     label.className = "field";
     label.innerHTML = `<span>玩家 ${i + 1} 暱稱</span>`;
@@ -116,30 +123,71 @@ function renderNameFields() {
     input.dataset.idx = String(i);
     input.autocomplete = "nickname";
     label.appendChild(input);
-    nameFields.appendChild(label);
+    wrap.appendChild(label);
+
+    const aiLabel = document.createElement("label");
+    aiLabel.className = "ai-toggle";
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.dataset.aiIdx = String(i);
+    // Default: seat 0 human, others AI when 2+ — nicer for solo try
+    cb.checked = i > 0;
+    aiLabel.appendChild(cb);
+    aiLabel.appendChild(document.createTextNode(" 開局即託管 AI"));
+    wrap.appendChild(aiLabel);
+
+    nameFields.appendChild(wrap);
   }
+}
+
+function stopAiLoop() {
+  if (aiTimer != null) {
+    clearTimeout(aiTimer);
+    aiTimer = null;
+  }
+}
+
+function scheduleAi() {
+  stopAiLoop();
+  if (!game || !needsAiStep(game)) return;
+  aiTimer = setTimeout(() => {
+    aiTimer = null;
+    if (!game || !needsAiStep(game)) return;
+    const result = aiStep(game);
+    if (result && result.ok === false) {
+      setPrompt(result.error || "AI 無法行動");
+    }
+    render();
+  }, AI_STEP_MS);
 }
 
 function buildBoardShell() {
   boardEl.innerHTML = "";
-  const center = document.createElement("div");
-  center.className = "cell center-slot";
-  center.textContent = "台灣路名地產";
-  center.style.gridColumn = "2 / 11";
-  center.style.gridRow = "2 / 11";
-  boardEl.appendChild(center);
-
+  // List order = board index (mobile-first). Ring layout uses gridColumn/Row at ≥720px.
   for (const tile of BOARD) {
     const pos = cellGridPos(tile.id);
     const btn = document.createElement("button");
     btn.type = "button";
-    btn.className = "cell" + (tile.type === "go" || tile.type === "jail" || tile.type === "parking" || tile.type === "gotojail" ? " corner" : "");
+    btn.className =
+      "cell" +
+      (tile.type === "go" ||
+      tile.type === "jail" ||
+      tile.type === "parking" ||
+      tile.type === "gotojail"
+        ? " corner"
+        : "");
     btn.dataset.id = String(tile.id);
     btn.style.gridColumn = String(pos.col);
     btn.style.gridRow = String(pos.row);
     btn.addEventListener("click", () => showTileDetail(tile.id));
     boardEl.appendChild(btn);
   }
+  const center = document.createElement("div");
+  center.className = "cell center-slot";
+  center.textContent = "台灣路名地產";
+  center.style.gridColumn = "2 / 11";
+  center.style.gridRow = "2 / 11";
+  boardEl.appendChild(center);
 }
 
 function showTileDetail(id) {
@@ -180,6 +228,10 @@ function showTileDetail(id) {
 
 function paintBoard() {
   if (!game) return;
+  /** @type {HTMLElement | null} */
+  let focusEl = null;
+  const currentPos = game.current()?.pos;
+
   for (const tile of BOARD) {
     const el = boardEl.querySelector(`[data-id="${tile.id}"]`);
     if (!el) continue;
@@ -192,20 +244,35 @@ function paintBoard() {
     }
     if (st?.mortgaged) sub = "抵押";
 
+    const occupants = game.players.filter(
+      (p) => !p.bankrupt && p.pos === tile.id,
+    );
+    const here = occupants.some((p) => p.id === game.turn);
+    el.classList.toggle("here", here);
+    if (tile.id === currentPos) focusEl = el;
+
     const swatch =
       tile.group && GROUP_COLOR[tile.group]
         ? `<span class="swatch" style="background:${GROUP_COLOR[tile.group]}"></span>`
-        : "";
+        : `<span class="swatch" style="background:transparent"></span>`;
 
-    const tokens = game.players
-      .filter((p) => !p.bankrupt && p.pos === tile.id)
+    const tokens = occupants
       .map(
         (p) =>
           `<span style="background:${TOKEN_COLORS[p.id]}" title="${p.name}"></span>`,
       )
       .join("");
 
-    el.innerHTML = `${swatch}<div class="name">${tile.name}</div><div class="sub">${sub}</div><div class="tokens">${tokens}</div>`;
+    el.innerHTML = `${swatch}<span class="cell-body"><span class="name">${tile.name}</span><span class="sub">${sub || "—"}</span></span><span class="tokens">${tokens}</span>`;
+  }
+
+  // Keep current tile visible in the mobile list without hijacking wide ring scroll.
+  if (
+    focusEl &&
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(max-width: 719px)").matches
+  ) {
+    focusEl.scrollIntoView({ block: "nearest", behavior: "smooth" });
   }
 }
 
@@ -220,15 +287,33 @@ function paintPlayers() {
     card.className =
       "player-card" +
       (p.id === game.turn && game.phase !== "ended" ? " active" : "") +
-      (p.bankrupt ? " broke" : "");
-    card.innerHTML = `
+      (p.bankrupt ? " broke" : "") +
+      (p.ai ? " ai" : "");
+
+    const main = document.createElement("div");
+    main.className = "player-card-main";
+    main.innerHTML = `
       <span class="token" style="background:${TOKEN_COLORS[p.id]}"></span>
-      <div>
-        <strong>${p.name}</strong>
-        <div class="meta">${p.bankrupt ? "已破產" : p.jail ? "坐牢中" : `位置：${tileById(p.pos).name}`} · 地產 ${owned} · 出獄卡 ${p.jailCards}</div>
+      <div class="player-card-text">
+        <strong>${p.name}${p.ai ? " · AI" : ""}</strong>
+        <div class="meta">${p.bankrupt ? "已破產" : p.jail ? "坐牢中" : `位置：${tileById(p.pos).name}`} · 地產 ${owned}${p.jailCards ? ` · 出獄卡 ${p.jailCards}` : ""}</div>
       </div>
-      <strong>${p.bankrupt ? "—" : money(p.cash)}</strong>
+      <strong class="cash">${p.bankrupt ? "—" : money(p.cash)}</strong>
     `;
+    card.appendChild(main);
+
+    if (!p.bankrupt && game.phase !== "ended") {
+      const tog = document.createElement("button");
+      tog.type = "button";
+      tog.className = "secondary ai-seat-btn";
+      tog.textContent = p.ai ? "收回" : "託管 AI";
+      tog.addEventListener("click", () => {
+        game.setPlayerAi(p.id, !p.ai);
+        render();
+      });
+      card.appendChild(tog);
+    }
+
     playersEl.appendChild(card);
   }
 }
@@ -506,14 +591,30 @@ function paintActions() {
   const p = game.current();
 
   if (phase === "ended") {
+    stopAiLoop();
     const w = game.players[game.winnerId];
     setPrompt(`${w.name} 贏得這局！`);
     actionsEl.appendChild(
       btn("再來一局", "primary", () => {
+        stopAiLoop();
         lobbyEl.hidden = false;
         gameEl.hidden = true;
         game = null;
         closeSheet();
+      }),
+    );
+    return;
+  }
+
+  // AI custody: hide manual acts for the acting seat
+  if (needsAiStep(game)) {
+    const id = actingPlayerId(game);
+    const ap = game.players[id];
+    setPrompt(`${ap.name} 由 AI 託管中…`);
+    actionsEl.appendChild(
+      btn("收回此玩家", "secondary", () => {
+        game.setPlayerAi(id, false);
+        render();
       }),
     );
     return;
@@ -632,14 +733,22 @@ function render() {
   paintPlayers();
   paintLog();
   paintActions();
+  scheduleAi();
 }
 
 document.getElementById("btn-start").addEventListener("click", () => {
   const n = Number(playerCountSel.value);
-  const inputs = [...nameFields.querySelectorAll("input")];
+  const inputs = [...nameFields.querySelectorAll("input[type='text']")];
   const names = inputs.map((el, i) => el.value.trim() || `玩家 ${i + 1}`);
-  game = new TwLandGame({ playerCount: n, names });
+  const aiFlags = [...nameFields.querySelectorAll("input[data-ai-idx]")].map(
+    (el) => /** @type {HTMLInputElement} */ (el).checked,
+  );
+  stopAiLoop();
+  game = new TwLandGame({ playerCount: n, names, aiFlags });
   game.start();
+  for (const p of game.players) {
+    if (p.ai) game.pushLog(`${p.name} 開局即由 AI 託管。`);
+  }
   lobbyEl.hidden = true;
   gameEl.hidden = false;
   closeSheet();
@@ -647,6 +756,7 @@ document.getElementById("btn-start").addEventListener("click", () => {
 });
 
 document.getElementById("btn-new").addEventListener("click", () => {
+  stopAiLoop();
   lobbyEl.hidden = false;
   gameEl.hidden = true;
   game = null;

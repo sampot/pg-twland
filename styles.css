@@ -1,3 +1,5 @@
+/* Mobile-first: default = narrow phone; enhance at min-width. */
+
 :root {
   color-scheme: light dark;
   --bg: #f3f1ec;
@@ -17,6 +19,8 @@
   --board-bg: #0f3d2e;
   --board-line: #1a5c45;
   --cell: #f7f3ea;
+  --dock-bg: color-mix(in oklab, var(--panel) 92%, var(--bg));
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -32,6 +36,7 @@
     --cell: #1a222c;
     --board-bg: #06261c;
     --board-line: #0f3d2e;
+    --dock-bg: color-mix(in oklab, var(--panel) 94%, #000);
   }
 }
 
@@ -64,12 +69,12 @@ body {
 }
 
 main {
-  width: min(100%, 40rem);
+  width: min(100%, 28rem);
   margin: 0 auto;
-  padding: 1rem 0.85rem 2.5rem;
+  padding: 0.85rem 0.75rem calc(1.25rem + var(--safe-bottom));
   display: flex;
   flex-direction: column;
-  gap: 0.85rem;
+  gap: 0.75rem;
 }
 
 .hero h1 {
@@ -79,23 +84,32 @@ main {
     Palatino,
     "Songti TC",
     serif;
-  font-size: clamp(1.65rem, 5vw, 2.1rem);
+  font-size: clamp(1.45rem, 6vw, 1.85rem);
   letter-spacing: 0.06em;
   text-align: center;
 }
 
 .tagline {
-  margin: 0.35rem 0 0;
+  margin: 0.3rem 0 0;
   text-align: center;
   color: var(--muted);
-  font-size: 0.92rem;
+  font-size: 0.88rem;
+}
+
+/* Compact hero while playing */
+body:has(#game:not([hidden])) .tagline {
+  display: none;
+}
+
+body:has(#game:not([hidden])) .hero h1 {
+  font-size: 1.2rem;
 }
 
 .panel {
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 0.75rem;
-  padding: 0.9rem 1rem;
+  padding: 0.85rem 0.95rem;
 }
 
 .field {
@@ -120,6 +134,7 @@ input[type="number"] {
   background: var(--bg);
   color: var(--text);
   font: inherit;
+  width: 100%;
 }
 
 .name-fields {
@@ -143,6 +158,7 @@ button {
   font: inherit;
   font-weight: 600;
   cursor: pointer;
+  touch-action: manipulation;
 }
 
 button:disabled {
@@ -170,44 +186,66 @@ button.danger {
 
 button.ghost {
   width: 100%;
-  margin-top: 0.5rem;
+  margin-top: 0.35rem;
   background: transparent;
   border-color: var(--line);
   color: var(--muted);
 }
 
+.game {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+
 .status-bar {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 0.5rem;
-  padding: 0.7rem 0.8rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.4rem;
+  padding: 0.65rem 0.7rem;
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 0.75rem;
-  font-size: 0.82rem;
+  font-size: 0.85rem;
 }
 
 .status-bar .label {
   display: block;
   color: var(--muted);
-  font-size: 0.72rem;
+  font-size: 0.7rem;
+}
+
+.status-bar strong {
+  display: block;
+  overflow-wrap: anywhere;
 }
 
 .players {
   display: grid;
-  gap: 0.45rem;
+  gap: 0.4rem;
 }
 
 .player-card {
-  display: grid;
-  grid-template-columns: auto 1fr auto;
-  gap: 0.55rem;
-  align-items: center;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  min-height: 48px;
   padding: 0.55rem 0.7rem;
   border-radius: 0.65rem;
   border: 1px solid var(--line);
   background: var(--panel);
   font-size: 0.88rem;
+}
+
+.player-card-main {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 0.55rem;
+  align-items: center;
+}
+
+.player-card.ai {
+  border-color: color-mix(in oklab, var(--accent) 45%, var(--line));
 }
 
 .player-card.active {
@@ -218,130 +256,219 @@ button.ghost {
   opacity: 0.45;
 }
 
-.token {
+.ai-seat-btn {
+  width: 100%;
+  min-height: 44px;
+}
+
+.seat-setup {
+  display: grid;
+  gap: 0.35rem;
+  margin-bottom: 0.65rem;
+  padding-bottom: 0.55rem;
+  border-bottom: 1px solid color-mix(in oklab, var(--line) 80%, transparent);
+}
+
+.seat-setup:last-child {
+  border-bottom: 0;
+  margin-bottom: 0;
+  padding-bottom: 0;
+}
+
+.ai-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 44px;
+  font-size: 0.88rem;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.ai-toggle input {
   width: 1.15rem;
   height: 1.15rem;
+  flex-shrink: 0;
+}
+
+.token {
+  width: 1.2rem;
+  height: 1.2rem;
   border-radius: 50%;
   border: 2px solid #fff;
   box-shadow: 0 0 0 1px var(--line);
+  flex-shrink: 0;
 }
 
 .player-card .meta {
   color: var(--muted);
-  font-size: 0.78rem;
+  font-size: 0.75rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.player-card .cash {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* —— Action dock: sticky primary controls on phone —— */
+.action-dock {
+  position: sticky;
+  top: 0;
+  z-index: 8;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  margin: 0 -0.15rem;
+  padding: 0.55rem 0.15rem 0.65rem;
+  background: linear-gradient(
+    to bottom,
+    var(--dock-bg) 70%,
+    color-mix(in oklab, var(--dock-bg) 0%, transparent)
+  );
+  border-bottom: 1px solid color-mix(in oklab, var(--line) 70%, transparent);
+}
+
+.prompt {
+  margin: 0;
+  padding: 0.7rem 0.8rem;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 0.65rem;
+  font-size: 0.92rem;
+  line-height: 1.4;
+}
+
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.actions button {
+  width: 100%;
+  flex: none;
+}
+
+.board-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.board-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.25rem 0.75rem;
+  padding: 0 0.15rem;
+}
+
+.board-title {
+  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.board-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.75rem;
 }
 
 .board-wrap {
-  overflow: auto;
+  overflow: visible;
   border-radius: 0.75rem;
   border: 1px solid var(--line);
   background: var(--board-bg);
   -webkit-overflow-scrolling: touch;
 }
 
+/* Default: vertical list — no horizontal chrome scroll */
 .board {
-  display: grid;
-  grid-template-columns: repeat(11, minmax(4.2rem, 1fr));
-  grid-template-rows: repeat(11, minmax(3.4rem, auto));
+  display: flex;
+  flex-direction: column;
   gap: 1px;
   background: var(--board-line);
-  min-width: 46rem;
+  min-width: 0;
+  width: 100%;
   padding: 1px;
 }
 
 .cell {
   position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  width: 100%;
+  min-height: 48px;
+  padding: 0.55rem 0.7rem;
   background: var(--cell);
   color: var(--text);
-  padding: 0.2rem;
-  font-size: 0.62rem;
-  line-height: 1.2;
-  min-height: 3.4rem;
+  font-size: 0.82rem;
+  line-height: 1.25;
   text-align: left;
   border: 0;
   cursor: pointer;
   font-family: inherit;
-}
-
-.cell .name {
-  font-weight: 700;
-  font-size: 0.68rem;
-}
-
-.cell .sub {
-  color: var(--muted);
+  border-radius: 0;
 }
 
 .cell .swatch {
   display: block;
-  height: 0.35rem;
-  margin: -0.2rem -0.2rem 0.25rem;
-  border-radius: 0;
+  width: 0.4rem;
+  align-self: stretch;
+  min-height: 1.6rem;
+  margin: 0;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.cell .cell-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.cell .name {
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+
+.cell .sub {
+  color: var(--muted);
+  font-size: 0.75rem;
 }
 
 .cell .tokens {
   display: flex;
   flex-wrap: wrap;
-  gap: 2px;
-  margin-top: 0.15rem;
+  gap: 3px;
+  flex-shrink: 0;
+  justify-content: flex-end;
+  min-width: 1.5rem;
 }
 
 .cell .tokens span {
-  width: 0.55rem;
-  height: 0.55rem;
+  width: 0.7rem;
+  height: 0.7rem;
   border-radius: 50%;
   border: 1px solid #fff;
 }
 
-.cell.corner {
-  font-size: 0.7rem;
+.cell.here {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  z-index: 1;
+  background: color-mix(in oklab, var(--accent) 10%, var(--cell));
 }
 
 .cell.center-slot {
-  grid-column: 2 / 11;
-  grid-row: 2 / 11;
-  background:
-    linear-gradient(
-      145deg,
-      color-mix(in oklab, var(--accent) 25%, var(--board-bg)),
-      var(--board-bg)
-    );
-  color: #e8fff6;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 0.35rem;
-  cursor: default;
-  pointer-events: none;
-  font-family:
-    "Iowan Old Style",
-    Palatino,
-    "Songti TC",
-    serif;
-  font-size: 1.25rem;
-  letter-spacing: 0.12em;
-}
-
-.prompt {
-  margin: 0;
-  padding: 0.75rem 0.85rem;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 0.65rem;
-  font-size: 0.95rem;
-  line-height: 1.4;
-}
-
-.actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.45rem;
-}
-
-.actions button {
-  flex: 1 1 calc(50% - 0.45rem);
-  min-width: 8rem;
+  display: none;
 }
 
 .log-panel summary {
@@ -355,7 +482,7 @@ button.ghost {
 .log {
   margin: 0.5rem 0 0;
   padding-left: 1.1rem;
-  max-height: 12rem;
+  max-height: 10rem;
   overflow: auto;
   color: var(--muted);
   font-size: 0.82rem;
@@ -369,7 +496,8 @@ button.ghost {
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  padding: 0.75rem;
+  padding: 0.5rem;
+  padding-bottom: max(0.5rem, var(--safe-bottom));
   z-index: 20;
 }
 
@@ -379,10 +507,10 @@ button.ghost {
 
 .sheet-card {
   width: min(100%, 28rem);
-  max-height: min(85dvh, 40rem);
+  max-height: min(88dvh, 40rem);
   overflow: auto;
   background: var(--panel);
-  border-radius: 0.9rem 0.9rem 0.5rem 0.5rem;
+  border-radius: 0.9rem 0.9rem 0.45rem 0.45rem;
   border: 1px solid var(--line);
   padding: 1rem 1rem 1.1rem;
 }
@@ -394,36 +522,44 @@ button.ghost {
 
 .sheet-actions {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.45rem;
+  flex-direction: column;
+  gap: 0.4rem;
   margin-top: 0.85rem;
 }
 
 .sheet-actions button {
-  flex: 1 1 auto;
+  width: 100%;
 }
 
 .tile-list {
   display: grid;
   gap: 0.35rem;
-  max-height: 12rem;
+  max-height: min(40dvh, 14rem);
   overflow: auto;
 }
 
 .tile-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 0.45rem;
+  gap: 0.4rem;
   min-height: 44px;
-  padding: 0.35rem 0.45rem;
+  padding: 0.4rem 0.5rem;
   border-radius: 0.45rem;
   border: 1px solid var(--line);
   font-size: 0.85rem;
 }
 
 .tile-row input {
-  width: 1.1rem;
-  height: 1.1rem;
+  width: 1.15rem;
+  height: 1.15rem;
+  flex-shrink: 0;
+}
+
+.tile-row button {
+  min-height: 40px;
+  padding: 0.35rem 0.65rem;
+  font-size: 0.8rem;
 }
 
 .trade-grid {
@@ -436,20 +572,145 @@ button.ghost {
   font-size: 0.9rem;
 }
 
+/* —— Wider: square ring board + side-by-side actions —— */
 @media (min-width: 720px) {
   main {
     width: min(100%, 52rem);
+    padding: 1rem 1rem 2rem;
+  }
+
+  body:has(#game:not([hidden])) .hero h1 {
+    font-size: clamp(1.65rem, 4vw, 2.1rem);
+  }
+
+  body:has(#game:not([hidden])) .tagline {
+    display: block;
+  }
+
+  .action-dock {
+    position: static;
+    margin: 0;
+    padding: 0;
+    background: none;
+    border: 0;
+  }
+
+  .actions {
+    flex-direction: row;
+    flex-wrap: wrap;
   }
 
   .actions button {
-    flex: 0 1 auto;
+    width: auto;
+    flex: 1 1 calc(50% - 0.45rem);
+    min-width: 9rem;
+  }
+
+  .board-hint::after {
+    content: " · 寬螢幕為環形棋盤";
+  }
+
+  .board-wrap {
+    overflow: auto;
+  }
+
+  .board {
+    display: grid;
+    grid-template-columns: repeat(11, minmax(3.6rem, 1fr));
+    grid-template-rows: repeat(11, minmax(3.1rem, auto));
+    min-width: 42rem;
+  }
+
+  .cell {
+    display: block;
+    width: auto;
+    min-height: 3.1rem;
+    padding: 0.2rem;
+    font-size: 0.62rem;
+    line-height: 1.15;
+  }
+
+  .cell .swatch {
+    width: auto;
+    height: 0.35rem;
+    min-height: 0;
+    align-self: auto;
+    margin: -0.2rem -0.2rem 0.25rem;
+    border-radius: 0;
+  }
+
+  .cell .cell-body {
+    display: block;
+  }
+
+  .cell .name {
+    font-size: 0.68rem;
+  }
+
+  .cell .sub {
+    font-size: 0.6rem;
+  }
+
+  .cell .tokens {
+    margin-top: 0.15rem;
+    justify-content: flex-start;
+    min-width: 0;
+  }
+
+  .cell .tokens span {
+    width: 0.55rem;
+    height: 0.55rem;
+  }
+
+  .cell.center-slot {
+    display: flex;
+    grid-column: 2 / 11;
+    grid-row: 2 / 11;
+    background:
+      linear-gradient(
+        145deg,
+        color-mix(in oklab, var(--accent) 25%, var(--board-bg)),
+        var(--board-bg)
+      );
+    color: #e8fff6;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+    cursor: default;
+    pointer-events: none;
+    font-family:
+      "Iowan Old Style",
+      Palatino,
+      "Songti TC",
+      serif;
+    font-size: 1.25rem;
+    letter-spacing: 0.12em;
+    min-height: 0;
   }
 
   .sheet {
     align-items: center;
+    padding: 0.75rem;
   }
 
   .sheet-card {
     border-radius: 0.9rem;
+  }
+
+  .sheet-actions {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+
+  .sheet-actions button {
+    width: auto;
+    flex: 1 1 auto;
+  }
+}
+
+@media (min-width: 960px) {
+  .actions button {
+    flex: 0 1 auto;
   }
 }
